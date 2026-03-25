@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { Sidebar, type SidebarSection } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
+import { AuthGuard } from "@/components/auth-guard";
+import { useAuth } from "@/lib/auth-context";
 
 const sections: SidebarSection[] = [
   {
@@ -51,26 +53,31 @@ export default function StudentDashboardLayout({
 }) {
   const pathname = usePathname();
   const title = titleMap[pathname] || "Dashboard";
+  const { user } = useAuth();
+  const initials = user?.username?.slice(0, 2).toUpperCase() ?? "ST";
+  const displayName = user?.username ?? "Student";
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <Sidebar
-        sections={sections}
-        userInitials="AK"
-        userName="Amara Kofi"
-        userRole="Student · Plus Plan"
-        avatarColor="violet"
-      />
-      <div className="ml-[240px]">
-        <Topbar
-          title={title}
-          userName="Amara Kofi"
-          userInitials="AK"
+    <AuthGuard allowedRoles={["student"]}>
+      <div className="min-h-screen bg-neutral-50">
+        <Sidebar
+          sections={sections}
+          userInitials={initials}
+          userName={displayName}
+          userRole="Student"
           avatarColor="violet"
-          searchPlaceholder="Search courses..."
         />
-        <main className="p-6">{children}</main>
+        <div className="ml-[240px]">
+          <Topbar
+            title={title}
+            userName={displayName}
+            userInitials={initials}
+            avatarColor="violet"
+            searchPlaceholder="Search courses..."
+          />
+          <main className="p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </AuthGuard>
   );
 }

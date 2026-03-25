@@ -3,11 +3,12 @@ export type UserRole = "student" | "tutor" | "admin";
 export interface User {
   id: number;
   email: string;
-  first_name: string;
-  last_name: string;
+  username: string;
   role: UserRole;
   is_approved: boolean;
+  is_email_verified: boolean;
   is_profile_complete: boolean;
+  date_joined: string;
 }
 
 export interface AuthTokens {
@@ -15,10 +16,47 @@ export interface AuthTokens {
   refresh: string;
 }
 
-export interface LoginResponse extends AuthTokens {
+export interface LoginUser {
+  id: number;
+  email: string;
+  username: string;
   role: UserRole;
   is_approved: boolean;
   is_profile_complete: boolean;
+}
+
+export interface LoginResponse extends AuthTokens {
+  user: LoginUser;
+}
+
+export interface RegisterPayload {
+  email: string;
+  username: string;
+  password: string;
+  password_confirm: string;
+  role: "student" | "tutor";
+  subject_area?: string;
+  qualifications?: string;
+  statement?: string;
+}
+
+export interface Profile {
+  id: number;
+  first_name: string;
+  last_name: string;
+  bio: string;
+  phone: string;
+  avatar_url: string;
+  is_complete: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProfileSetupPayload {
+  first_name: string;
+  last_name: string;
+  bio?: string;
+  phone?: string;
 }
 
 export interface Course {

@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { Sidebar, type SidebarSection } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
+import { AuthGuard } from "@/components/auth-guard";
+import { useAuth } from "@/lib/auth-context";
 
 const sections: SidebarSection[] = [
   {
@@ -48,26 +50,31 @@ export default function AdminDashboardLayout({
 }) {
   const pathname = usePathname();
   const title = titleMap[pathname] || "Dashboard";
+  const { user } = useAuth();
+  const initials = user?.username?.slice(0, 2).toUpperCase() ?? "AD";
+  const displayName = user?.username ?? "Admin";
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <Sidebar
-        sections={sections}
-        userInitials="AD"
-        userName="Admin"
-        userRole="Super Admin"
-        avatarColor="green"
-      />
-      <div className="ml-[240px]">
-        <Topbar
-          title={title}
-          userName="Admin"
-          userInitials="AD"
+    <AuthGuard allowedRoles={["admin"]}>
+      <div className="min-h-screen bg-neutral-50">
+        <Sidebar
+          sections={sections}
+          userInitials={initials}
+          userName={displayName}
+          userRole="Admin"
           avatarColor="green"
-          searchPlaceholder="Search..."
         />
-        <main className="p-6">{children}</main>
+        <div className="ml-[240px]">
+          <Topbar
+            title={title}
+            userName={displayName}
+            userInitials={initials}
+            avatarColor="green"
+            searchPlaceholder="Search..."
+          />
+          <main className="p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </AuthGuard>
   );
 }

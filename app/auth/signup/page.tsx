@@ -1,20 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ShieldCheck, GraduationCap, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/toast";
+import { apiFetch, ApiError } from "@/lib/api";
+import type { RegisterPayload } from "@/lib/types";
 
 function PasswordInput({
   value,
   onChange,
   id,
+  placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   id: string;
+  placeholder?: string;
 }) {
   const [show, setShow] = useState(false);
   return (
@@ -22,7 +28,7 @@ function PasswordInput({
       <Input
         id={id}
         type={show ? "text" : "password"}
-        placeholder="Min. 8 characters"
+        placeholder={placeholder ?? "Min. 8 characters"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required
@@ -64,26 +70,76 @@ const qualifications = [
   "Professional Certification",
 ];
 
+function extractErrors(body: Record<string, unknown>): string {
+  const messages: string[] = [];
+  for (const [key, val] of Object.entries(body)) {
+    if (Array.isArray(val)) {
+      messages.push(...val.map((v) => String(v)));
+    } else if (typeof val === "string") {
+      messages.push(val);
+    } else if (key === "detail" && typeof val === "string") {
+      messages.push(val);
+    }
+  }
+  return messages.length > 0 ? messages[0] : "Registration failed. Please try again.";
+}
+
 export default function SignUpPage() {
   const [tab, setTab] = useState<"student" | "tutor">("student");
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const toast = useToast();
 
   // shared fields
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
 
   // tutor-only fields
   const [subject, setSubject] = useState("");
   const [qualification, setQualification] = useState("");
-  const [introduction, setIntroduction] = useState("");
+  const [statement, setStatement] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (password !== passwordConfirm) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+
     setLoading(true);
-    // TODO: integrate with backend register API
-    setLoading(false);
+    try {
+      const payload: RegisterPayload = {
+        email,
+        username,
+        password,
+        password_confirm: passwordConfirm,
+        role: tab,
+      };
+
+      if (tab === "tutor") {
+        payload.subject_area = subject;
+        payload.qualifications = qualification;
+        payload.statement = statement;
+      }
+
+      await apiFetch("/users/register/", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      router.push(`/auth/check-email?email=${encodeURIComponent(email)}`);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error(extractErrors(err.body));
+      } else {
+        toast.error("Something went wrong. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -104,6 +160,7 @@ export default function SignUpPage() {
       {/* Role tabs */}
       <div className="inline-flex bg-neutral-100 rounded-xl p-1 gap-1 mb-6">
         <button
+          type="button"
           onClick={() => setTab("student")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             tab === "student"
@@ -115,6 +172,7 @@ export default function SignUpPage() {
           Student
         </button>
         <button
+          type="button"
           onClick={() => setTab("tutor")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             tab === "tutor"
@@ -137,25 +195,14 @@ export default function SignUpPage() {
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-        <div className="grid grid-cols-2 gap-2.5">
-          <div>
-            <Label>First Name</Label>
-            <Input
-              placeholder={tab === "tutor" ? "Dr. Sarah" : "Amara"}
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <Label>Last Name</Label>
-            <Input
-              placeholder={tab === "tutor" ? "Osei" : "Kofi"}
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              required
-            />
-          </div>
+        <div>
+          <Label>Username</Label>
+          <Input
+            placeholder={tab === "tutor" ? "dr_sarah" : "amara_k"}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
         </div>
 
         <div>
@@ -208,9 +255,10 @@ export default function SignUpPage() {
               <textarea
                 className="w-full px-3 py-2.5 text-sm rounded-xl border-[1.5px] border-neutral-200 bg-white text-neutral-900 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 resize-none"
                 rows={2}
-                placeholder="Your experience and qualifications..."
-                value={introduction}
-                onChange={(e) => setIntroduction(e.target.value)}
+                placeholder="Your teaching experience and motivation..."
+                value={statement}
+                onChange={(e) => setStatement(e.target.value)}
+                required
               />
             </div>
           </>
@@ -222,6 +270,16 @@ export default function SignUpPage() {
             id={tab === "tutor" ? "tu-pw" : "su-pw"}
             value={password}
             onChange={setPassword}
+          />
+        </div>
+
+        <div>
+          <Label>Confirm Password</Label>
+          <PasswordInput
+            id={tab === "tutor" ? "tu-pw-c" : "su-pw-c"}
+            value={passwordConfirm}
+            onChange={setPasswordConfirm}
+            placeholder="Repeat your password"
           />
         </div>
 
