@@ -18,18 +18,26 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
     if (loading) return;
 
     if (!user) {
-      router.replace("/auth/signin");
+      // Admins have a separate login
+      if (allowedRoles?.includes("admin") && allowedRoles.length === 1) {
+        router.replace("/admin/login");
+      } else {
+        router.replace("/auth/signin");
+      }
       return;
     }
 
-    if (!user.is_profile_complete) {
-      router.replace("/auth/profile-setup");
-      return;
-    }
+    // Admin users skip profile-complete and approval checks
+    if (user.role !== "admin") {
+      if (!user.is_profile_complete) {
+        router.replace("/auth/profile-setup");
+        return;
+      }
 
-    if (user.role === "tutor" && !user.is_approved) {
-      router.replace("/auth/pending-approval");
-      return;
+      if (user.role === "tutor" && !user.is_approved) {
+        router.replace("/auth/pending-approval");
+        return;
+      }
     }
 
     if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -57,8 +65,10 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   }
 
   if (!user) return null;
-  if (!user.is_profile_complete) return null;
-  if (user.role === "tutor" && !user.is_approved) return null;
+  if (user.role !== "admin") {
+    if (!user.is_profile_complete) return null;
+    if (user.role === "tutor" && !user.is_approved) return null;
+  }
   if (allowedRoles && !allowedRoles.includes(user.role)) return null;
 
   return <>{children}</>;

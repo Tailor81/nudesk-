@@ -115,3 +115,102 @@ export interface PaginatedResponse<T> {
   previous: string | null;
   results: T[];
 }
+
+// ── Admin Types ──
+
+export interface AdminDashboard {
+  gmv_monthly: string;
+  active_students: number;
+  active_tutors: number;
+  published_courses: number;
+  pending_tutor_applications: number;
+  pending_courses: number;
+  pending_study_guides: number;
+  total_users: number;
+  total_transactions: number;
+}
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  username: string;
+  role: UserRole;
+  first_name: string;
+  last_name: string;
+  is_active: boolean;
+  is_approved: boolean;
+  is_email_verified: boolean;
+  is_profile_complete: boolean;
+  date_joined: string;
+}
+
+export interface TutorApplication {
+  id: number;
+  email: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  subject_area: string;
+  qualifications: string;
+  statement: string;
+  cv_url: string;
+  status: "pending" | "approved" | "rejected";
+  rejection_reason: string;
+  reviewed_at: string | null;
+  date_joined: string;
+  created_at: string;
+}
+
+// ── Content Review Types ──
+
+export interface PendingCourse {
+  id: number;
+  title: string;
+  slug: string;
+  description: string;
+  tutor_email: string;
+  tutor_name: string;
+  category_name: string;
+  is_free: boolean;
+  price: string;
+  module_count: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PendingStudyGuide {
+  id: number;
+  title: string;
+  slug: string;
+  description: string;
+  tutor_email: string;
+  tutor_name: string;
+  category_name: string;
+  is_free: boolean;
+  price: string;
+  page_count: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TutorCourse {
+  id: number;
+  title: string;
+  slug: string;
+  description: string;
+  category: number;
+  category_name: string;
+  tutor: number;
+  tutor_name: string;
+  cover_image: string | null;
+  is_free: boolean;
+  price: string;
+  status: string;
+  module_count: number;
+  average_rating: number | null;
+  review_count: number;
+  created_at: string;
+  rejection_reason?: string;
+}

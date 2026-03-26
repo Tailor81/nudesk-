@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
@@ -13,6 +14,7 @@ import {
 import { Sidebar, type SidebarSection } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { AuthGuard } from "@/components/auth-guard";
+import { ProfileEditModal } from "@/components/dashboard/profile-edit-modal";
 import { useAuth } from "@/lib/auth-context";
 
 const sections: SidebarSection[] = [
@@ -50,9 +52,15 @@ export default function TutorDashboardLayout({
 }) {
   const pathname = usePathname();
   const title = titleMap[pathname] || "Dashboard";
-  const { user } = useAuth();
-  const initials = user?.username?.slice(0, 2).toUpperCase() ?? "TU";
-  const displayName = user?.username ?? "Tutor";
+  const { user, profile, logout } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const displayName = profile?.first_name && profile?.last_name
+    ? `${profile.first_name} ${profile.last_name}`
+    : user?.username ?? "Tutor";
+  const initials = profile?.first_name && profile?.last_name
+    ? (profile.first_name[0] + profile.last_name[0]).toUpperCase()
+    : user?.username?.slice(0, 2).toUpperCase() ?? "TU";
 
   return (
     <AuthGuard allowedRoles={["tutor"]}>
@@ -63,6 +71,8 @@ export default function TutorDashboardLayout({
           userName={displayName}
           userRole="Tutor"
           avatarColor="orange"
+          onUserClick={() => setProfileOpen(true)}
+          onLogout={logout}
         />
         <div className="ml-[240px]">
           <Topbar
@@ -71,10 +81,12 @@ export default function TutorDashboardLayout({
             userInitials={initials}
             avatarColor="orange"
             searchPlaceholder="Search content..."
+            onAvatarClick={() => setProfileOpen(true)}
           />
           <main className="p-6">{children}</main>
         </div>
       </div>
+      <ProfileEditModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </AuthGuard>
   );
 }

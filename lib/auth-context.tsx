@@ -10,16 +10,18 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "./api";
-import type { LoginUser, AuthTokens } from "./types";
+import type { LoginUser, AuthTokens, Profile } from "./types";
 
 interface AuthContextValue {
   user: LoginUser | null;
   tokens: AuthTokens | null;
+  profile: Profile | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<LoginUser>;
   logout: () => Promise<void>;
   setAuth: (user: LoginUser, tokens: AuthTokens) => void;
   refreshUser: () => Promise<void>;
+  fetchProfile: () => Promise<Profile | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -49,6 +51,17 @@ function getStoredUser(): LoginUser | null {
   }
 }
 
+function getStoredProfile(): Profile | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("profile");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function storeAuth(user: LoginUser, tokens: AuthTokens) {
   localStorage.setItem("access_token", tokens.access);
   localStorage.setItem("refresh_token", tokens.refresh);
@@ -59,18 +72,36 @@ function clearAuth() {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
   localStorage.removeItem("user");
+  localStorage.removeItem("profile");
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LoginUser | null>(() => getStoredUser());
   const [tokens, setTokens] = useState<AuthTokens | null>(() => getStoredTokens());
+  const [profile, setProfile] = useState<Profile | null>(() => getStoredProfile());
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Mark hydration complete after mount
+  const fetchProfile = useCallback(async (): Promise<Profile | null> => {
+    const currentTokens = getStoredTokens();
+    if (!currentTokens) return null;
+    try {
+      const data = await apiFetch<Profile>("/users/profile/setup/", {
+        token: currentTokens.access,
+      });
+      setProfile(data);
+      localStorage.setItem("profile", JSON.stringify(data));
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Mark hydration complete after mount + fetch profile if logged in
   useEffect(() => {
     setLoading(false);
-  }, []);
+    if (getStoredTokens()) fetchProfile();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setAuth = useCallback((user: LoginUser, tokens: AuthTokens) => {
     storeAuth(user, tokens);
@@ -119,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAuth();
     setUser(null);
     setTokens(null);
+    setProfile(null);
     router.push("/auth/signin");
   }, [router]);
 
@@ -173,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, tokens, loading, login, logout, setAuth, refreshUser }}
+      value={{ user, tokens, profile, loading, login, logout, setAuth, refreshUser, fetchProfile }}
     >
       {children}
     </AuthContext.Provider>

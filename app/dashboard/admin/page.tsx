@@ -1,35 +1,104 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
+import type { AdminDashboard } from "@/lib/types";
 
-const stats = [
-  { icon: "💰", label: "GMV This Month", value: "$142K", change: "↑ 18% MoM", color: "bg-violet-50" },
-  { icon: "👥", label: "Active Students", value: "12,840", change: "↑ 420 this month", color: "bg-orange-50" },
-  { icon: "⭐", label: "Active Tutors", value: "840", change: "↑ 12 approved", color: "bg-green-50" },
-  { icon: "▶️", label: "Published Courses", value: "3,248", change: "↑ 47 this month", color: "bg-amber-50" },
-];
+function fmt(n: number) {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n}`;
+}
 
-const revenueData = [
-  { month: "Jun", amount: "$98K", height: "52%" },
-  { month: "Jul", amount: "$108K", height: "58%" },
-  { month: "Aug", amount: "$102K", height: "55%" },
-  { month: "Sep", amount: "$116K", height: "62%" },
-  { month: "Oct", amount: "$121K", height: "65%" },
-  { month: "Nov", amount: "$142K", height: "76%", highlight: true },
-];
-
-const actions = [
-  { icon: "📋", title: "Tutor Applications", desc: "4 awaiting review", badge: "4", badgeColor: "red" as const, href: "/dashboard/admin/applications" },
-  { icon: "📚", title: "Content Reviews", desc: "7 courses pending approval", badge: "7", badgeColor: "orange" as const, href: "/dashboard/admin/content" },
-  { icon: "🚩", title: "Flagged Content", desc: "2 reports to review", badge: "2", badgeColor: "red" as const, href: "/dashboard/admin/users" },
-  { icon: "✅", title: "Payouts Processed", desc: "All Nov payouts sent", badge: null, badgeColor: "green" as const, href: null },
-];
+function num(n: number) {
+  return n.toLocaleString();
+}
 
 export default function AdminOverviewPage() {
+  const { tokens } = useAuth();
+  const [data, setData] = useState<AdminDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!tokens) return;
+    apiFetch<AdminDashboard>("/admins/dashboard/", { token: tokens.access })
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [tokens]);
+
+  const stats = data
+    ? [
+        { icon: "💰", label: "GMV This Month", value: fmt(Number(data.gmv_monthly)), color: "bg-violet-50" },
+        { icon: "👥", label: "Active Students", value: num(data.active_students), color: "bg-orange-50" },
+        { icon: "⭐", label: "Active Tutors", value: num(data.active_tutors), color: "bg-green-50" },
+        { icon: "▶️", label: "Published Courses", value: num(data.published_courses), color: "bg-amber-50" },
+      ]
+    : [];
+
+  const actions = data
+    ? [
+        {
+          icon: "📋",
+          title: "Tutor Applications",
+          desc: `${data.pending_tutor_applications} awaiting review`,
+          badge: data.pending_tutor_applications > 0 ? String(data.pending_tutor_applications) : null,
+          badgeColor: "red" as const,
+          href: "/dashboard/admin/applications",
+        },
+        {
+          icon: "📚",
+          title: "Content Reviews",
+          desc: `${data.pending_courses} courses pending`,
+          badge: data.pending_courses > 0 ? String(data.pending_courses) : null,
+          badgeColor: "orange" as const,
+          href: "/dashboard/admin/content",
+        },
+        {
+          icon: "📝",
+          title: "Study Guides",
+          desc: `${data.pending_study_guides} pending review`,
+          badge: data.pending_study_guides > 0 ? String(data.pending_study_guides) : null,
+          badgeColor: "amber" as const,
+          href: null,
+        },
+        {
+          icon: "👥",
+          title: "Total Users",
+          desc: `${num(data.total_users)} registered`,
+          badge: null,
+          badgeColor: "green" as const,
+          href: "/dashboard/admin/users",
+        },
+      ]
+    : [];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <svg className="animate-spin w-6 h-6 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M21 12a9 9 0 11-6.219-8.56" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="text-center py-24 text-sm text-neutral-400">
+        Failed to load dashboard data.
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-6">
         <h2 className="text-[1.3rem] font-extrabold tracking-[-0.02em]">Platform Overview</h2>
-        <p className="text-[.875rem] text-neutral-500 mt-1">November 2025 · Real-time data</p>
+        <p className="text-[.875rem] text-neutral-500 mt-1">Real-time data</p>
       </div>
 
       {/* Stats */}
@@ -41,47 +110,35 @@ export default function AdminOverviewPage() {
             </div>
             <div className="text-[1.35rem] font-extrabold tracking-tight">{s.value}</div>
             <div className="text-[.75rem] text-neutral-500 mb-1">{s.label}</div>
-            <div className="text-[.72rem] font-semibold text-green-600 bg-green-50 rounded-full px-2 py-0.5 w-fit">
-              {s.change}
-            </div>
           </div>
         ))}
       </div>
 
-      {/* Revenue chart + Pending actions */}
+      {/* Summary + Pending actions */}
       <div className="grid grid-cols-[1fr_320px] gap-4">
-        {/* Revenue */}
+        {/* Summary Card */}
         <div className="bg-white rounded-2xl border border-neutral-200 p-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="text-[.9rem] font-bold">Platform Revenue (GMV)</div>
-            <Badge variant="violet">+18% MoM</Badge>
+            <div className="text-[.9rem] font-bold">Platform Summary</div>
+            <Badge variant="violet">{num(data.total_transactions)} transactions</Badge>
           </div>
-          <div className="flex items-end gap-3 h-[150px]">
-            {revenueData.map((d) => (
-              <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="text-[.65rem] font-semibold text-neutral-500"
-                  style={d.highlight ? { color: "var(--color-violet-600)", fontWeight: 700 } : undefined}
-                >
-                  {d.amount}
-                </div>
-                <div
-                  className="w-full rounded-lg"
-                  style={{
-                    height: d.height,
-                    background: d.highlight
-                      ? "linear-gradient(to top, var(--color-violet-600), var(--color-violet-400))"
-                      : "var(--color-violet-100)",
-                  }}
-                />
-                <div
-                  className="text-[.7rem] font-medium text-neutral-500"
-                  style={d.highlight ? { color: "var(--color-violet-600)", fontWeight: 700 } : undefined}
-                >
-                  {d.month}
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <div className="text-2xl font-extrabold">{num(data.total_users)}</div>
+              <div className="text-xs text-neutral-500 mt-1">Total Registered Users</div>
+            </div>
+            <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <div className="text-2xl font-extrabold">{num(data.active_students)}</div>
+              <div className="text-xs text-neutral-500 mt-1">Active Students</div>
+            </div>
+            <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <div className="text-2xl font-extrabold">{num(data.active_tutors)}</div>
+              <div className="text-xs text-neutral-500 mt-1">Active Tutors</div>
+            </div>
+            <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <div className="text-2xl font-extrabold">{num(data.published_courses)}</div>
+              <div className="text-xs text-neutral-500 mt-1">Published Courses</div>
+            </div>
           </div>
         </div>
 

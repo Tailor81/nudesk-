@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,8 @@ interface SidebarProps {
   userName: string;
   userRole: string;
   avatarColor?: "violet" | "orange" | "green";
+  onUserClick?: () => void;
+  onLogout?: () => void;
 }
 
 export function Sidebar({
@@ -31,6 +34,8 @@ export function Sidebar({
   userName,
   userRole,
   avatarColor = "violet",
+  onUserClick,
+  onLogout,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -101,21 +106,35 @@ export function Sidebar({
 
       {/* User footer */}
       <div className="px-3 py-4 border-t border-white/10">
-        <div className="flex items-center gap-2.5 px-2">
-          <div
-            className={cn(
-              "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-              colorMap[avatarColor]
-            )}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onUserClick}
+            className="flex items-center gap-2.5 px-2 flex-1 min-w-0 rounded-lg hover:bg-white/6 transition-colors py-1.5 cursor-pointer"
           >
-            {userInitials}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-white truncate">
-              {userName}
+            <div
+              className={cn(
+                "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
+                colorMap[avatarColor]
+              )}
+            >
+              {userInitials}
             </div>
-            <div className="text-[.7rem] text-white/40">{userRole}</div>
-          </div>
+            <div className="min-w-0 text-left">
+              <div className="text-sm font-semibold text-white truncate">
+                {userName}
+              </div>
+              <div className="text-[.7rem] text-white/40">{userRole}</div>
+            </div>
+          </button>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Log out"
+              className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/8 transition-colors shrink-0 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </aside>

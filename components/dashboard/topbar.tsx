@@ -9,6 +9,7 @@ interface TopbarProps {
   userInitials: string;
   avatarColor?: "violet" | "orange" | "green";
   searchPlaceholder?: string;
+  onAvatarClick?: () => void;
 }
 
 export function Topbar({
@@ -17,6 +18,7 @@ export function Topbar({
   userInitials,
   avatarColor = "violet",
   searchPlaceholder = "Search...",
+  onAvatarClick,
 }: TopbarProps) {
   return (
     <div className="h-[60px] bg-white border-b border-neutral-200 flex items-center px-6 gap-4 sticky top-0 z-50">
@@ -36,7 +38,9 @@ export function Topbar({
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full" />
         </button>
 
-        <Avatar initials={userInitials} size="md" color={avatarColor} />
+        <button onClick={onAvatarClick} className="cursor-pointer">
+          <Avatar initials={userInitials} size="md" color={avatarColor} />
+        </button>
       </div>
     </div>
   );

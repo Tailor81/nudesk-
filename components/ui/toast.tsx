@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { Check, X, AlertTriangle, Info } from "lucide-react";
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
 
 type ToastType = "success" | "error" | "warning" | "info";
 
@@ -54,12 +54,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, 3500);
   }, []);
 
-  const value: ToastContextValue = {
-    success: (msg) => add(msg, "success"),
-    error: (msg) => add(msg, "error"),
-    warning: (msg) => add(msg, "warning"),
-    info: (msg) => add(msg, "info"),
-  };
+  const value: ToastContextValue = useMemo(() => ({
+    success: (msg: string) => add(msg, "success"),
+    error: (msg: string) => add(msg, "error"),
+    warning: (msg: string) => add(msg, "warning"),
+    info: (msg: string) => add(msg, "info"),
+  }), [add]);
 
   return (
     <ToastContext.Provider value={value}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
@@ -14,6 +15,7 @@ import {
 import { Sidebar, type SidebarSection } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { AuthGuard } from "@/components/auth-guard";
+import { ProfileEditModal } from "@/components/dashboard/profile-edit-modal";
 import { useAuth } from "@/lib/auth-context";
 
 const sections: SidebarSection[] = [
@@ -53,9 +55,15 @@ export default function StudentDashboardLayout({
 }) {
   const pathname = usePathname();
   const title = titleMap[pathname] || "Dashboard";
-  const { user } = useAuth();
-  const initials = user?.username?.slice(0, 2).toUpperCase() ?? "ST";
-  const displayName = user?.username ?? "Student";
+  const { user, profile, logout } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const displayName = profile?.first_name && profile?.last_name
+    ? `${profile.first_name} ${profile.last_name}`
+    : user?.username ?? "Student";
+  const initials = profile?.first_name && profile?.last_name
+    ? (profile.first_name[0] + profile.last_name[0]).toUpperCase()
+    : user?.username?.slice(0, 2).toUpperCase() ?? "ST";
 
   return (
     <AuthGuard allowedRoles={["student"]}>
@@ -66,6 +74,8 @@ export default function StudentDashboardLayout({
           userName={displayName}
           userRole="Student"
           avatarColor="violet"
+          onUserClick={() => setProfileOpen(true)}
+          onLogout={logout}
         />
         <div className="ml-[240px]">
           <Topbar
@@ -74,10 +84,12 @@ export default function StudentDashboardLayout({
             userInitials={initials}
             avatarColor="violet"
             searchPlaceholder="Search courses..."
+            onAvatarClick={() => setProfileOpen(true)}
           />
           <main className="p-6">{children}</main>
         </div>
       </div>
+      <ProfileEditModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </AuthGuard>
   );
 }
