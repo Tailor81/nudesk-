@@ -2,8 +2,8 @@ export function cn(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
-export function formatCurrency(amount: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
+export function formatCurrency(amount: number, currency = "BWP") {
+  return new Intl.NumberFormat("en-BW", {
     style: "currency",
     currency,
     maximumFractionDigits: 0,

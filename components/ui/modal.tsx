@@ -47,7 +47,7 @@ export function Modal({ open, onClose, children, size = "md" }: ModalProps) {
     >
       <div
         className={cn(
-          "bg-white rounded-2xl shadow-2xl w-full animate-fade-up",
+          "bg-white rounded-2xl shadow-2xl w-full animate-fade-up flex flex-col max-h-[90vh]",
           sizeClasses[size]
         )}
       >
@@ -85,7 +85,7 @@ export function ModalHead({
 }
 
 export function ModalBody({ children }: { children: ReactNode }) {
-  return <div className="p-5">{children}</div>;
+  return <div className="p-5 overflow-y-auto flex-1">{children}</div>;
 }
 
 export function ModalFoot({ children }: { children: ReactNode }) {

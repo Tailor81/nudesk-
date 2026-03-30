@@ -1,151 +1,31 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
-import { StarRating } from "@/components/ui/star-rating";
 import { Badge } from "@/components/ui/badge";
-import { Ruler, Atom, FlaskConical, Code } from "lucide-react";
-import type { ReactNode } from "react";
+import { StarRating } from "@/components/ui/star-rating";
+import { apiFetch } from "@/lib/api";
+import type { Course, PaginatedResponse } from "@/lib/types";
 
-interface CourseCardData {
-  title: string;
-  category: string;
-  categoryColor: string;
-  categoryBg: string;
-  Icon: typeof Ruler;
-  thumbGradient: string;
-  badge?: { text: string; color: string };
-  rating: number;
-  reviewCount: number;
-  modules: number;
-  instructor: { initials: string; name: string; color: "violet" | "orange" | "green" };
-  price: number;
-  originalPrice: number;
-  accentBtn?: boolean;
-}
-
-const courses: CourseCardData[] = [
-  {
-    title: "Advanced Calculus I: Limits, Derivatives & Integration",
-    category: "Mathematics",
-    categoryColor: "text-primary",
-    categoryBg: "bg-primary-light",
-    Icon: Ruler,
-    thumbGradient: "from-violet-100 to-violet-200",
-    badge: { text: "Bestseller", color: "bg-primary" },
-    rating: 4.9,
-    reviewCount: 312,
-    modules: 12,
-    instructor: { initials: "SO", name: "Dr. Sarah Osei", color: "violet" },
-    price: 49,
-    originalPrice: 99,
-  },
-  {
-    title: "Quantum Physics Foundations: From Zero to Schrodinger",
-    category: "Physics",
-    categoryColor: "text-orange-600",
-    categoryBg: "bg-accent-light",
-    Icon: Atom,
-    thumbGradient: "from-orange-50 to-orange-100",
-    badge: { text: "New", color: "bg-accent" },
-    rating: 4.8,
-    reviewCount: 187,
-    modules: 15,
-    instructor: { initials: "KA", name: "Prof. Kwame Asante", color: "orange" },
-    price: 59,
-    originalPrice: 119,
-    accentBtn: true,
-  },
-  {
-    title: "Organic Chemistry Masterclass: Reactions & Mechanisms",
-    category: "Chemistry",
-    categoryColor: "text-green-700",
-    categoryBg: "bg-success-light",
-    Icon: FlaskConical,
-    thumbGradient: "from-green-50 to-green-100",
-    rating: 4.9,
-    reviewCount: 248,
-    modules: 8,
-    instructor: { initials: "AM", name: "Dr. Ama Mensah", color: "green" },
-    price: 44,
-    originalPrice: 89,
-  },
-  {
-    title: "Data Structures & Algorithms in Python",
-    category: "Computer Science",
-    categoryColor: "text-blue-700",
-    categoryBg: "bg-blue-50",
-    Icon: Code,
-    thumbGradient: "from-blue-50 to-blue-100",
-    rating: 4.7,
-    reviewCount: 421,
-    modules: 10,
-    instructor: { initials: "NO", name: "Nadia Osei-Bonsu", color: "violet" },
-    price: 54,
-    originalPrice: 109,
-  },
+const gradients = [
+  "from-violet-100 to-violet-200",
+  "from-orange-50 to-orange-100",
+  "from-green-50 to-green-100",
+  "from-blue-50 to-blue-100",
 ];
-
-function CourseCard({ course }: { course: CourseCardData }) {
-  return (
-    <div className="bg-white border-[1.5px] border-neutral-200 rounded-[20px] overflow-hidden transition-all duration-200 hover:shadow-2xl hover:-translate-y-[5px] hover:border-violet-200 cursor-pointer">
-      <div className="aspect-video overflow-hidden relative flex items-center justify-center">
-        <div
-          className={`w-full h-full bg-gradient-to-br ${course.thumbGradient} flex items-center justify-center`}
-        >
-          <course.Icon className="w-12 h-12 text-neutral-400" />
-        </div>
-        {course.badge && (
-          <span
-            className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[.7rem] font-bold text-white uppercase tracking-wide ${course.badge.color}`}
-          >
-            {course.badge.text}
-          </span>
-        )}
-      </div>
-
-      <div className="px-[18px] py-4 pb-5">
-        <span
-          className={`inline-flex px-2.5 py-[3px] rounded-full text-[.7rem] font-bold mb-2 ${course.categoryBg} ${course.categoryColor}`}
-        >
-          {course.category}
-        </span>
-        <div className="text-[.975rem] font-bold text-neutral-900 leading-snug mb-2 line-clamp-2">
-          {course.title}
-        </div>
-        <div className="flex items-center gap-2 text-xs text-neutral-500 mb-3 flex-wrap">
-          <span className="text-orange-500 font-bold">{course.rating}</span>
-          <StarRating rating={course.rating} />
-          <span>({course.reviewCount})</span>
-          <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 shrink-0" />
-          <span>{course.modules} modules</span>
-        </div>
-        <div className="flex items-center gap-2 pt-3 border-t border-neutral-200">
-          <Avatar initials={course.instructor.initials} size="sm" color={course.instructor.color} />
-          <span className="text-[.8rem] font-medium text-neutral-700">
-            {course.instructor.name}
-          </span>
-        </div>
-        <div className="flex items-center justify-between mt-3">
-          <div>
-            <span className="text-[1.05rem] font-extrabold text-neutral-900">
-              ${course.price}
-            </span>
-            <span className="text-[.8rem] text-neutral-400 line-through ml-1.5">
-              ${course.originalPrice}
-            </span>
-          </div>
-          <Button
-            variant={course.accentBtn ? "accent" : "primary"}
-            size="sm"
-          >
-            Enroll
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
+const emojis = ["📚", "🧠", "🔬", "💡"];
 
 export function CoursesSection() {
+  const [courses, setCourses] = useState<Course[]>([]);
+
+  useEffect(() => {
+    apiFetch<PaginatedResponse<Course>>("/courses/")
+      .then((d) => setCourses(d.results.slice(0, 4)))
+      .catch(() => {});
+  }, []);
+
   return (
     <section className="py-20">
       <div className="max-w-[1200px] mx-auto px-6">
@@ -164,11 +44,60 @@ export function CoursesSection() {
           <Button variant="outline-v" href="/courses">All Courses</Button>
         </div>
 
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-5">
-          {courses.map((c) => (
-            <CourseCard key={c.title} course={c} />
-          ))}
-        </div>
+        {courses.length === 0 ? (
+          <div className="text-center py-12 text-neutral-400 text-sm">Loading courses...</div>
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-5">
+            {courses.map((c, i) => (
+              <Link
+                key={c.id}
+                href={`/courses/${c.slug}`}
+                className="bg-white border-[1.5px] border-neutral-200 rounded-[20px] overflow-hidden transition-all duration-200 hover:shadow-2xl hover:-translate-y-[5px] hover:border-violet-200 cursor-pointer"
+              >
+                <div className="aspect-video overflow-hidden relative flex items-center justify-center">
+                  {c.cover_image ? (
+                    <img src={c.cover_image} alt={c.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-br ${gradients[i % gradients.length]} flex items-center justify-center text-[3rem]`}>
+                      {emojis[i % emojis.length]}
+                    </div>
+                  )}
+                  <Badge
+                    variant={c.is_free ? "green" : "amber"}
+                    className="absolute top-3 right-3"
+                  >
+                    {c.is_free ? "Free" : `P${c.price}`}
+                  </Badge>
+                </div>
+                <div className="px-[18px] py-4 pb-5">
+                  <Badge variant="violet" className="mb-2">{c.category_name}</Badge>
+                  <div className="text-[.975rem] font-bold text-neutral-900 leading-snug mb-2 line-clamp-2">
+                    {c.title}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-neutral-500 mb-3 flex-wrap">
+                    {c.average_rating != null && c.average_rating > 0 && (
+                      <>
+                        <span className="flex items-center gap-0.5 text-amber-500 font-bold">
+                          <Star className="w-3 h-3 fill-amber-500" />
+                          {c.average_rating.toFixed(1)}
+                        </span>
+                        <span>({c.review_count})</span>
+                        <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 shrink-0" />
+                      </>
+                    )}
+                    <span>{c.module_count} modules</span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-3 border-t border-neutral-200">
+                    <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-[.65rem] font-bold">
+                      {c.tutor_name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                    </div>
+                    <span className="text-[.8rem] font-medium text-neutral-700">{c.tutor_name}</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

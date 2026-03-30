@@ -1,7 +1,12 @@
+"use client";
+
 import { Search, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { apiFetch } from "@/lib/api";
+import type { Course, Category, PaginatedResponse } from "@/lib/types";
 import {
   Award,
   Video,
@@ -141,11 +146,23 @@ export function HeroSection() {
 }
 
 export function StatsBar() {
+  const [courseCount, setCourseCount] = useState(0);
+  const [categoryCount, setCategoryCount] = useState(0);
+
+  useEffect(() => {
+    apiFetch<PaginatedResponse<Course>>("/courses/")
+      .then((d) => setCourseCount(d.count))
+      .catch(() => {});
+    apiFetch<PaginatedResponse<Category>>("/courses/categories/")
+      .then((d) => setCategoryCount(d.count))
+      .catch(() => {});
+  }, []);
+
   const stats = [
     { value: "12K+", label: "Active Students" },
     { value: "840+", label: "Expert Tutors" },
-    { value: "3,200+", label: "Courses & Guides" },
-    { value: "60+", label: "Subjects" },
+    { value: courseCount > 0 ? `${courseCount.toLocaleString()}+` : "—", label: "Courses & Guides" },
+    { value: categoryCount > 0 ? `${categoryCount}+` : "—", label: "Subjects" },
     { value: "98%", label: "Satisfaction Rate" },
   ];
 

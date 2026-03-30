@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import type { AdminDashboard } from "@/lib/types";
+import type { AdminDashboard, MonthlyRevenueRow } from "@/lib/types";
 
 function fmt(n: number) {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n}`;
+  if (n >= 1_000_000) return `P${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `P${(n / 1_000).toFixed(0)}K`;
+  return `P${n}`;
 }
 
 function num(n: number) {
@@ -20,12 +20,19 @@ function num(n: number) {
 export default function AdminOverviewPage() {
   const { tokens } = useAuth();
   const [data, setData] = useState<AdminDashboard | null>(null);
+  const [chartData, setChartData] = useState<MonthlyRevenueRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!tokens) return;
-    apiFetch<AdminDashboard>("/admins/dashboard/", { token: tokens.access })
-      .then(setData)
+    Promise.all([
+      apiFetch<AdminDashboard>("/admins/dashboard/", { token: tokens.access }),
+      apiFetch<MonthlyRevenueRow[]>("/admins/revenue/breakdown/", { token: tokens.access }),
+    ])
+      .then(([d, chart]) => {
+        setData(d);
+        setChartData(chart.slice(0, 6).reverse());
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [tokens]);
@@ -102,7 +109,7 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3.5 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
         {stats.map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-neutral-200 p-4">
             <div className={`w-8 h-8 rounded-lg ${s.color} flex items-center justify-center text-base mb-2`}>
@@ -114,8 +121,41 @@ export default function AdminOverviewPage() {
         ))}
       </div>
 
+      {/* Revenue Chart */}
+      {chartData.length > 0 && (
+        <div className="bg-white rounded-2xl border border-neutral-200 p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-[.9rem] font-bold">Monthly Revenue</div>
+            <Link href="/dashboard/admin/revenue" className="text-xs text-violet-600 hover:underline font-medium">
+              View Details →
+            </Link>
+          </div>
+          <div className="flex items-end gap-2 h-[180px]">
+            {(() => {
+              const maxGmv = Math.max(...chartData.map((r) => Number(r.gmv)), 1);
+              return chartData.map((row) => {
+                const pct = (Number(row.gmv) / maxGmv) * 100;
+                const label = new Date(row.month + "-01").toLocaleDateString("en-US", { month: "short" });
+                return (
+                  <div key={row.month} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="text-[.65rem] font-bold text-neutral-600">{fmt(Number(row.gmv))}</div>
+                    <div className="w-full flex justify-center">
+                      <div
+                        className="w-full max-w-[48px] bg-violet-500 rounded-t-md transition-all"
+                        style={{ height: `${Math.max(pct, 4)}%` }}
+                      />
+                    </div>
+                    <div className="text-[.65rem] text-neutral-500 font-medium">{label}</div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Summary + Pending actions */}
-      <div className="grid grid-cols-[1fr_320px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         {/* Summary Card */}
         <div className="bg-white rounded-2xl border border-neutral-200 p-5">
           <div className="flex items-center justify-between mb-4">

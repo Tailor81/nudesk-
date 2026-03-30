@@ -5,16 +5,20 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/courses", label: "Courses" },
+  { href: "/study-guides", label: "Study Guides" },
+  { href: "/live-sessions", label: "Live Sessions" },
   { href: "/how-it-works", label: "How It Works" },
   { href: "/pricing", label: "Pricing" },
 ];
 
 export function Navbar() {
   const pathname = usePathname();
+  const { user } = useAuth();
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-[70px] z-[200] bg-white/92 backdrop-blur-[16px] backdrop-saturate-[180%] border-b border-black/7 flex items-center transition-shadow duration-200">
@@ -39,12 +43,20 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="md" href="/auth/signin">
-            Sign In
-          </Button>
-          <Button variant="primary" size="md" href="/auth/signup">
-            Get Started Free
-          </Button>
+          {user ? (
+            <Button variant="primary" size="md" href={`/dashboard/${user.role}`}>
+              Dashboard
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="md" href="/auth/signin">
+                Sign In
+              </Button>
+              <Button variant="primary" size="md" href="/auth/signup">
+                Get Started Free
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </nav>

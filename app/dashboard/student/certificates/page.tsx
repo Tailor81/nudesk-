@@ -1,28 +1,48 @@
-import { Download, Share2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+"use client";
 
-const certificates = [
-  {
-    title: "Organic Chemistry Masterclass",
-    instructor: "Dr. Ama Mensah",
-    issued: "Issued Oct 2025",
-    gradient: "from-violet-700 to-violet-900",
-  },
-  {
-    title: "Linear Algebra I",
-    instructor: "Dr. Sarah Osei",
-    issued: "Issued Sep 2025",
-    gradient: "from-orange-600 to-orange-800",
-  },
-  {
-    title: "Intro to Statistics",
-    instructor: "Prof. Abena Wiredu",
-    issued: "Issued Aug 2025",
-    gradient: "from-teal-700 to-emerald-900",
-  },
+import { useEffect, useState, useCallback } from "react";
+import { Download, Share2, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
+import type { Certificate, PaginatedResponse } from "@/lib/types";
+
+const GRADIENTS = [
+  "from-violet-700 to-violet-900",
+  "from-orange-600 to-orange-800",
+  "from-teal-700 to-emerald-900",
+  "from-blue-700 to-blue-900",
+  "from-rose-600 to-rose-800",
 ];
 
 export default function StudentCertificatesPage() {
+  const { tokens } = useAuth();
+  const [certs, setCerts] = useState<Certificate[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!tokens) return;
+    setLoading(true);
+    try {
+      const data = await apiFetch<PaginatedResponse<Certificate>>("/students/certificates/", {
+        token: tokens.access,
+      });
+      setCerts(data.results);
+    } finally {
+      setLoading(false);
+    }
+  }, [tokens]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -31,48 +51,59 @@ export default function StudentCertificatesPage() {
         </h2>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-        {certificates.map((cert) => (
-          <div
-            key={cert.title}
-            className={`relative bg-gradient-to-br ${cert.gradient} rounded-[20px] p-6 text-white overflow-hidden`}
-          >
-            {/* Decorative circles */}
-            <div className="absolute -right-5 -top-5 w-[120px] h-[120px] rounded-full bg-white/[.07]" />
-            <div className="absolute right-5 -bottom-[30px] w-20 h-20 rounded-full bg-white/[.05]" />
+      {certs.length === 0 ? (
+        <div className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-12 text-center">
+          <p className="text-sm text-neutral-500">
+            No certificates earned yet. Complete a course to earn your first certificate!
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+          {certs.map((cert, i) => (
+            <div
+              key={cert.id}
+              className={`relative bg-gradient-to-br ${GRADIENTS[i % GRADIENTS.length]} rounded-[20px] p-6 text-white overflow-hidden`}
+            >
+              {/* Decorative circles */}
+              <div className="absolute -right-5 -top-5 w-[120px] h-[120px] rounded-full bg-white/[.07]" />
+              <div className="absolute right-5 -bottom-[30px] w-20 h-20 rounded-full bg-white/[.05]" />
 
-            <div className="relative z-[1]">
-              <div className="text-[.72rem] font-bold uppercase tracking-[0.08em] opacity-60 mb-2">
-                Certificate of Completion
-              </div>
-              <div className="text-[1.15rem] font-extrabold mb-1">
-                {cert.title}
-              </div>
-              <div className="text-[.82rem] opacity-70 mb-5">
-                {cert.instructor} · {cert.issued}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="bg-white/15 text-white border-white/20 hover:bg-white/25"
-                >
-                  <Download className="w-3 h-3" />
-                  Download
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="bg-white/15 text-white border-white/20 hover:bg-white/25"
-                >
-                  <Share2 className="w-3 h-3" />
-                  Share
-                </Button>
+              <div className="relative z-[1]">
+                <div className="text-[.72rem] font-bold uppercase tracking-[0.08em] opacity-60 mb-2">
+                  Certificate of Completion
+                </div>
+                <div className="text-[1.15rem] font-extrabold mb-1">
+                  {cert.course_title}
+                </div>
+                <div className="text-[.82rem] opacity-70 mb-1">
+                  {cert.tutor_name}
+                </div>
+                <div className="text-[.72rem] opacity-50 mb-5">
+                  Issued {new Date(cert.issued_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="bg-white/15 text-white border-white/20 hover:bg-white/25"
+                  >
+                    <Download className="w-3 h-3" />
+                    Download
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="bg-white/15 text-white border-white/20 hover:bg-white/25"
+                  >
+                    <Share2 className="w-3 h-3" />
+                    Share
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

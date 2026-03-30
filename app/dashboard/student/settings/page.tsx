@@ -1,14 +1,82 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch, ApiError } from "@/lib/api";
+import type { Profile } from "@/lib/types";
 
 export default function StudentSettingsPage() {
+  const { user, tokens, fetchProfile } = useAuth();
+  const toast = useToast();
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [bio, setBio] = useState("");
+  const [phone, setPhone] = useState("");
+
   const [notifications, setNotifications] = useState({
     liveReminders: true,
     newCourse: true,
     weeklyReport: false,
   });
+
+  const loadProfile = useCallback(async () => {
+    if (!tokens) return;
+    setLoading(true);
+    try {
+      const p = await apiFetch<Profile>("/users/profile/setup/", {
+        token: tokens.access,
+      });
+      setFirstName(p.first_name);
+      setLastName(p.last_name);
+      setBio(p.bio || "");
+      setPhone(p.phone || "");
+    } catch {
+      toast.error("Failed to load profile.");
+    } finally {
+      setLoading(false);
+    }
+  }, [tokens, toast]);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tokens) return;
+    setSaving(true);
+    try {
+      await apiFetch<Profile>("/users/profile/setup/", {
+        method: "PATCH",
+        token: tokens.access,
+        body: JSON.stringify({ first_name: firstName, last_name: lastName, bio, phone }),
+      });
+      await fetchProfile();
+      toast.success("Profile updated.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const detail = err.body.detail ?? Object.values(err.body).flat().join(", ");
+        toast.error(typeof detail === "string" ? detail : "Failed to save.");
+      } else {
+        toast.error("Something went wrong.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -18,11 +86,14 @@ export default function StudentSettingsPage() {
         </h2>
       </div>
 
-      <div className="grid grid-cols-[1fr_340px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
         {/* Left column */}
         <div className="flex flex-col gap-3.5">
           {/* Profile */}
-          <div className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-6">
+          <form
+            onSubmit={handleSave}
+            className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-6"
+          >
             <div className="text-[.9rem] font-bold mb-5">
               Profile Information
             </div>
@@ -34,7 +105,9 @@ export default function StudentSettingsPage() {
                   </label>
                   <input
                     className="w-full px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                    defaultValue="Amara"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
                   />
                 </div>
                 <div>
@@ -43,7 +116,9 @@ export default function StudentSettingsPage() {
                   </label>
                   <input
                     className="w-full px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                    defaultValue="Kofi"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
                   />
                 </div>
               </div>
@@ -52,8 +127,20 @@ export default function StudentSettingsPage() {
                   Email
                 </label>
                 <input
+                  className="w-full px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-neutral-50 text-neutral-500 cursor-not-allowed"
+                  value={user?.email ?? ""}
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="block text-[.8rem] font-semibold text-neutral-700 mb-1.5">
+                  Phone
+                </label>
+                <input
                   className="w-full px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                  defaultValue="amara@example.com"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+27 XXX XXX XXXX"
                 />
               </div>
               <div>
@@ -63,89 +150,31 @@ export default function StudentSettingsPage() {
                 <textarea
                   className="w-full px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 resize-y min-h-[88px] leading-[1.6]"
                   rows={3}
-                  defaultValue="Computer Science student passionate about mathematics and algorithms."
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  placeholder="Tell us a bit about yourself..."
                 />
               </div>
               <div>
-                <Button variant="primary">Save Changes</Button>
+                <Button type="submit" variant="primary" loading={saving}>
+                  Save Changes
+                </Button>
               </div>
             </div>
-          </div>
-
-          {/* Password */}
-          <div className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-6">
-            <div className="text-[.9rem] font-bold mb-5">Change Password</div>
-            <div className="flex flex-col gap-3">
-              <div>
-                <label className="block text-[.8rem] font-semibold text-neutral-700 mb-1.5">
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  className="w-full px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                  placeholder="••••••••"
-                />
-              </div>
-              <div>
-                <label className="block text-[.8rem] font-semibold text-neutral-700 mb-1.5">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  className="w-full px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-                  placeholder="••••••••"
-                />
-              </div>
-              <div>
-                <Button variant="secondary">Update Password</Button>
-              </div>
-            </div>
-          </div>
+          </form>
         </div>
 
         {/* Right column */}
         <div className="flex flex-col gap-3.5">
-          {/* Current Plan */}
-          <div className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-6">
-            <div className="text-[.9rem] font-bold mb-1">Current Plan</div>
-            <div className="text-[.8rem] text-neutral-500 mb-4">
-              NuDesk Plus
-            </div>
-            <div className="bg-gradient-to-br from-violet-600 to-violet-900 rounded-xl p-4 text-white mb-3.5">
-              <div className="text-[.7rem] font-bold opacity-60 uppercase tracking-[0.08em] mb-1">
-                Plus Plan
-              </div>
-              <div className="text-2xl font-extrabold">
-                $19
-                <span className="text-sm opacity-60">/mo</span>
-              </div>
-              <div className="text-[.78rem] opacity-60 mt-1">
-                Renews Jan 15, 2026
-              </div>
-            </div>
-            <Button variant="outline-v" className="w-full">
-              Upgrade to Pro
-            </Button>
-          </div>
-
           {/* Notifications */}
           <div className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-6">
             <div className="text-[.9rem] font-bold mb-4">Notifications</div>
             <div className="flex flex-col gap-3.5">
-              {[
-                {
-                  label: "Live class reminders",
-                  key: "liveReminders" as const,
-                },
-                {
-                  label: "New course notifications",
-                  key: "newCourse" as const,
-                },
-                {
-                  label: "Weekly progress report",
-                  key: "weeklyReport" as const,
-                },
-              ].map((item) => (
+              {([
+                { label: "Live class reminders", key: "liveReminders" as const },
+                { label: "New course notifications", key: "newCourse" as const },
+                { label: "Weekly progress report", key: "weeklyReport" as const },
+              ]).map((item) => (
                 <div
                   key={item.key}
                   className="flex items-center justify-between"

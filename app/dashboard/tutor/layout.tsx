@@ -74,7 +74,7 @@ export default function TutorDashboardLayout({
           onUserClick={() => setProfileOpen(true)}
           onLogout={logout}
         />
-        <div className="ml-[240px]">
+        <div className="md:ml-[240px]">
           <Topbar
             title={title}
             userName={displayName}
@@ -83,7 +83,7 @@ export default function TutorDashboardLayout({
             searchPlaceholder="Search content..."
             onAvatarClick={() => setProfileOpen(true)}
           />
-          <main className="p-6">{children}</main>
+          <main className="p-4 md:p-6">{children}</main>
         </div>
       </div>
       <ProfileEditModal open={profileOpen} onClose={() => setProfileOpen(false)} />

@@ -1,137 +1,125 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
 import {
   PlayCircle,
   Flame,
   Award,
   Clock,
-  CheckCircle2,
-  Video,
-  Download,
   Play,
+  Calendar,
+  Loader2,
 } from "lucide-react";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
+import type {
+  StudentDashboard,
+  Enrollment,
+  LiveClassRegistration,
+  PaginatedResponse,
+  Notification,
+} from "@/lib/types";
 
-const stats = [
-  {
-    icon: PlayCircle,
-    iconBg: "bg-violet-50 text-primary",
-    value: "7",
-    label: "Enrolled Courses",
-    change: "↑ 2 this month",
-    badge: "Active",
-  },
-  {
-    icon: Flame,
-    iconBg: "bg-orange-50 text-accent",
-    value: "12 🔥",
-    label: "Day Streak",
-    change: "↑ Personal best",
-  },
-  {
-    icon: Award,
-    iconBg: "bg-green-50 text-success",
-    value: "3",
-    label: "Certificates Earned",
-    change: "↑ 1 this month",
-  },
-  {
-    icon: Clock,
-    iconBg: "bg-amber-50 text-amber-600",
-    value: "48h",
-    label: "Study Hours",
-    change: "↑ 8h this week",
-  },
+const GRADIENTS = [
+  "from-violet-50 to-violet-100",
+  "from-orange-50 to-orange-100",
+  "from-green-50 to-emerald-100",
+  "from-amber-50 to-amber-100",
 ];
-
-const continueLearning = [
-  {
-    emoji: "📐",
-    title: "Advanced Calculus I",
-    pct: 42,
-    color: "violet" as const,
-    gradient: "from-violet-50 to-violet-100",
-    meta: "Module 5 of 12 · 42% complete",
-    btnVariant: "primary" as const,
-  },
-  {
-    emoji: "⚛️",
-    title: "Quantum Physics Foundations",
-    pct: 53,
-    color: "orange" as const,
-    gradient: "from-orange-50 to-orange-100",
-    meta: "Module 8 of 15 · 53% complete",
-    btnVariant: "accent" as const,
-  },
-  {
-    emoji: "💻",
-    title: "Data Structures & Algorithms",
-    pct: 20,
-    color: "green" as const,
-    gradient: "from-green-50 to-emerald-100",
-    meta: "Module 2 of 10 · 20% complete",
-    btnVariant: "ghost-v" as const,
-  },
-];
-
-const upcomingClasses = [
-  {
-    day: "Mon",
-    date: "18",
-    title: "Calculus Problem Clinic",
-    meta: "Dr. Sarah Osei · 10:00 AM",
-    colorBg: "bg-violet-50",
-    colorBorder: "border-violet-100",
-    colorText: "text-primary",
-  },
-  {
-    day: "Wed",
-    date: "20",
-    title: "Quantum States Q&A",
-    meta: "Prof. Kwame Asante · 2:00 PM",
-    colorBg: "bg-orange-50",
-    colorBorder: "border-orange-100",
-    colorText: "text-orange-600",
-  },
-];
-
-const activities = [
-  {
-    icon: CheckCircle2,
-    iconBg: "bg-green-50 text-success",
-    title: "Completed Module 4",
-    meta: "Calculus I · 2h ago",
-  },
-  {
-    icon: Video,
-    iconBg: "bg-violet-50 text-primary",
-    title: "Attended Live Session",
-    meta: "Quantum Physics · Yesterday",
-  },
-  {
-    icon: Download,
-    iconBg: "bg-orange-50 text-accent",
-    title: "Downloaded Study Guide",
-    meta: "Organic Chemistry · 3 days ago",
-  },
-];
+const COLORS: ("violet" | "orange" | "green")[] = ["violet", "orange", "green"];
 
 export default function StudentOverviewPage() {
+  const { user, tokens } = useAuth();
+  const [dash, setDash] = useState<StudentDashboard | null>(null);
+  const [courses, setCourses] = useState<Enrollment[]>([]);
+  const [upcoming, setUpcoming] = useState<LiveClassRegistration[]>([]);
+  const [activity, setActivity] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!tokens) return;
+    setLoading(true);
+    try {
+      const [d, cl, reg, notifs] = await Promise.all([
+        apiFetch<StudentDashboard>("/students/dashboard/", { token: tokens.access }),
+        apiFetch<PaginatedResponse<Enrollment>>("/students/continue-learning/", { token: tokens.access }),
+        apiFetch<PaginatedResponse<LiveClassRegistration>>(
+          "/students/live-classes/",
+          { token: tokens.access }
+        ),
+        apiFetch<PaginatedResponse<Notification>>(
+          "/notifications/?limit=5",
+          { token: tokens.access }
+        ),
+      ]);
+      setDash(d);
+      setCourses(cl.results);
+      setUpcoming(reg.results.filter((r) => r.status === "scheduled").slice(0, 3));
+      setActivity(notifs.results);
+    } finally {
+      setLoading(false);
+    }
+  }, [tokens]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading || !dash) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const firstName = user?.username ?? "Student";
+
+  const stats = [
+    {
+      icon: PlayCircle,
+      iconBg: "bg-violet-50 text-primary",
+      value: String(dash.enrolled_courses),
+      label: "Enrolled Courses",
+      badge: dash.enrolled_courses > 0 ? "Active" : undefined,
+    },
+    {
+      icon: Flame,
+      iconBg: "bg-orange-50 text-accent",
+      value: `${dash.learning_streak_days} 🔥`,
+      label: "Day Streak",
+    },
+    {
+      icon: Award,
+      iconBg: "bg-green-50 text-success",
+      value: String(dash.certificates_earned),
+      label: "Certificates Earned",
+    },
+    {
+      icon: Clock,
+      iconBg: "bg-amber-50 text-amber-600",
+      value: `${Math.round(dash.total_study_hours)}h`,
+      label: "Study Hours",
+    },
+  ];
+
   return (
     <div>
       {/* Greeting */}
       <div className="mb-6">
         <h2 className="text-[1.3rem] font-extrabold tracking-[-0.02em]">
-          Good morning, Amara 👋
+          Welcome back, {firstName} 👋
         </h2>
-        <p className="text-sm text-neutral-500 mt-1">
-          You&apos;re on a 12-day learning streak. Keep it up!
-        </p>
+        {dash.learning_streak_days > 0 && (
+          <p className="text-sm text-neutral-500 mt-1">
+            You&apos;re on a {dash.learning_streak_days}-day learning streak. Keep it up!
+          </p>
+        )}
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-3.5 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
         {stats.map((s) => (
           <div
             key={s.label}
@@ -151,15 +139,12 @@ export default function StudentOverviewPage() {
             <div className="text-[.78rem] text-neutral-500 mt-0.5">
               {s.label}
             </div>
-            <div className="text-[.72rem] text-success font-semibold mt-1.5">
-              {s.change}
-            </div>
           </div>
         ))}
       </div>
 
       {/* Continue Learning + Sidebar */}
-      <div className="grid grid-cols-[1fr_300px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
         {/* Continue Learning */}
         <div className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -169,26 +154,31 @@ export default function StudentOverviewPage() {
             </Button>
           </div>
           <div className="flex flex-col gap-3">
-            {continueLearning.map((c) => (
+            {courses.length === 0 && (
+              <p className="text-sm text-neutral-500 py-6 text-center">
+                No courses in progress yet.
+              </p>
+            )}
+            {courses.map((c, i) => (
               <div
-                key={c.title}
+                key={c.id}
                 className="bg-neutral-50 border-[1.5px] border-neutral-200 rounded-xl px-4 py-3.5 flex items-center gap-3 hover:border-violet-200 hover:shadow-xl hover:-translate-y-[3px] transition-all cursor-pointer"
               >
                 <div
-                  className={`w-12 h-12 rounded-[10px] bg-gradient-to-br ${c.gradient} flex items-center justify-center text-[1.4rem] shrink-0`}
+                  className={`w-12 h-12 rounded-[10px] bg-gradient-to-br ${GRADIENTS[i % GRADIENTS.length]} flex items-center justify-center text-[1.4rem] shrink-0`}
                 >
-                  {c.emoji}
+                  📚
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold mb-1.5 truncate">
-                    {c.title}
+                    {c.course_title}
                   </div>
-                  <ProgressBar value={c.pct} color={c.color} />
+                  <ProgressBar value={c.progress_percentage} color={COLORS[i % COLORS.length]} />
                   <div className="text-[.72rem] text-neutral-500 mt-1">
-                    {c.meta}
+                    Module {c.completed_modules} of {c.module_count} · {c.progress_percentage}% complete
                   </div>
                 </div>
-                <Button variant={c.btnVariant} size="sm">
+                <Button variant="primary" size="sm">
                   <Play className="w-3 h-3" />
                   Resume
                 </Button>
@@ -205,32 +195,32 @@ export default function StudentOverviewPage() {
               Upcoming Live Classes
             </div>
             <div className="flex flex-col gap-3">
-              {upcomingClasses.map((cls) => (
-                <div key={cls.title} className="flex items-start gap-3">
-                  <div
-                    className={`${cls.colorBg} border-[1.5px] ${cls.colorBorder} rounded-lg px-2.5 py-1.5 text-center shrink-0 min-w-[44px]`}
-                  >
-                    <div
-                      className={`text-[.65rem] font-bold ${cls.colorText} uppercase`}
-                    >
-                      {cls.day}
+              {upcoming.length === 0 && (
+                <p className="text-[.8rem] text-neutral-400">No upcoming classes.</p>
+              )}
+              {upcoming.map((cls) => {
+                const d = new Date(cls.scheduled_date);
+                const day = d.toLocaleDateString("en-US", { weekday: "short" });
+                const date = d.getDate();
+                return (
+                  <div key={cls.id} className="flex items-start gap-3">
+                    <div className="bg-violet-50 border-[1.5px] border-violet-100 rounded-lg px-2.5 py-1.5 text-center shrink-0 min-w-[44px]">
+                      <div className="text-[.65rem] font-bold text-primary uppercase">
+                        {day}
+                      </div>
+                      <div className="text-[1.1rem] font-extrabold text-primary leading-none">
+                        {date}
+                      </div>
                     </div>
-                    <div
-                      className={`text-[1.1rem] font-extrabold ${cls.colorText} leading-none`}
-                    >
-                      {cls.date}
+                    <div>
+                      <div className="text-[.82rem] font-semibold">{cls.class_title}</div>
+                      <div className="text-[.73rem] text-neutral-500 mt-0.5">
+                        {cls.tutor_name} · {cls.start_time?.slice(0, 5)}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[.82rem] font-semibold">
-                      {cls.title}
-                    </div>
-                    <div className="text-[.73rem] text-neutral-500 mt-0.5">
-                      {cls.meta}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -238,17 +228,18 @@ export default function StudentOverviewPage() {
           <div className="bg-white border-[1.5px] border-neutral-200 rounded-2xl p-5">
             <div className="text-[.9rem] font-bold mb-3.5">Recent Activity</div>
             <div className="flex flex-col gap-2.5">
-              {activities.map((a) => (
-                <div key={a.title} className="flex items-center gap-3">
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${a.iconBg}`}
-                  >
-                    <a.icon className="w-3.5 h-3.5" />
+              {activity.length === 0 && (
+                <p className="text-[.8rem] text-neutral-400">No recent activity.</p>
+              )}
+              {activity.map((a) => (
+                <div key={a.id} className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-violet-50 text-primary">
+                    <Calendar className="w-3.5 h-3.5" />
                   </div>
                   <div>
                     <div className="text-[.8rem] font-semibold">{a.title}</div>
                     <div className="text-[.72rem] text-neutral-500">
-                      {a.meta}
+                      {new Date(a.created_at).toLocaleDateString()}
                     </div>
                   </div>
                 </div>
