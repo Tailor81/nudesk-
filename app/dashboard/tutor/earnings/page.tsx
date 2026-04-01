@@ -102,14 +102,16 @@ export default function TutorEarningsPage() {
             <div className="flex items-end gap-2 h-40">
               {data.monthly_chart.map((m) => {
                 const rev = parseFloat(m.revenue);
-                const pct = Math.max((rev / peakRevenue) * 100, 4);
+                const barH = Math.max((rev / peakRevenue) * 110, 4);
                 return (
                   <div key={m.month} className="flex-1 flex flex-col items-center gap-1.5">
                     <span className="text-[.65rem] font-semibold text-neutral-600">{fmt(rev)}</span>
-                    <div
-                      className="w-full max-w-[40px] bg-violet-500 rounded-t-md transition-all"
-                      style={{ height: `${pct}%` }}
-                    />
+                    <div className="w-full flex justify-center items-end flex-1">
+                      <div
+                        className="w-full max-w-[40px] bg-violet-500 rounded-t-md transition-all"
+                        style={{ height: `${barH}px` }}
+                      />
+                    </div>
                     <span className="text-[.6rem] text-neutral-400">
                       {new Date(m.month + "-01").toLocaleString("default", { month: "short" })}
                     </span>

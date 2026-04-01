@@ -1,4 +1,4 @@
-export type UserRole = "student" | "tutor" | "admin";
+export type UserRole = "student" | "tutor" | "admin" | "parent";
 
 export interface User {
   id: number;
@@ -34,7 +34,7 @@ export interface RegisterPayload {
   username: string;
   password: string;
   password_confirm: string;
-  role: "student" | "tutor";
+  role: "student" | "tutor" | "parent";
   subject_area?: string;
   qualifications?: string;
   statement?: string;
@@ -206,6 +206,7 @@ export interface AdminDashboard {
   gmv_monthly: string;
   active_students: number;
   active_tutors: number;
+  active_parents: number;
   published_courses: number;
   pending_tutor_applications: number;
   pending_courses: number;
@@ -570,6 +571,108 @@ export interface MonthlyRevenueRow {
   commission: string;
   tutor_payouts: string;
   transaction_count: number;
+}
+
+// ── Parent Module Types ──
+
+export interface ParentChildLink {
+  id: number;
+  parent: { id: number; email: string; first_name: string; last_name: string };
+  child: { id: number; email: string; first_name: string; last_name: string };
+  status:
+    | "pending_parent_approval"
+    | "pending_child_approval"
+    | "active"
+    | "declined"
+    | "removed";
+  initiated_by: "parent" | "child";
+  requested_at: string;
+  responded_at: string | null;
+}
+
+export interface ParentDashboard {
+  children_count: number;
+  total_enrolled: number;
+  total_certs: number;
+  total_spent: string;
+}
+
+export interface ChildSummary {
+  link_id: number;
+  child_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  avatar_url: string;
+  enrolled_courses: number;
+  completed_courses: number;
+  certificates_earned: number;
+  avg_progress: number;
+  latest_activity: string | null;
+  linked_since: string;
+}
+
+export interface ChildDetail {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  avatar_url: string;
+  bio: string;
+  phone: string;
+  stats: {
+    enrolled_courses: number;
+    completed_courses: number;
+    certificates_earned: number;
+    total_study_hours: number;
+    learning_streak_days: number;
+  };
+}
+
+export interface ChildCourseProgress {
+  id: number;
+  course: number;
+  course_title: string;
+  course_slug: string;
+  tutor_name: string;
+  cover_image: string | null;
+  progress_percentage: number;
+  module_count: number;
+  completed_modules: number;
+  enrolled_at: string;
+  completed_at: string | null;
+}
+
+export interface ParentTransaction {
+  id: number;
+  reference: string;
+  content_type: "course" | "study_guide" | "live_class";
+  content_title: string;
+  child_email: string;
+  child_name: string;
+  amount: string;
+  status: "pending" | "completed" | "failed" | "refunded";
+  created_at: string;
+}
+
+export interface ChildInviteInfo {
+  email: string;
+  parent_name: string;
+}
+
+export interface InviteAcceptResult {
+  access: string;
+  refresh: string;
+  user: {
+    id: number;
+    email: string;
+    role: UserRole;
+    username: string;
+    first_name: string;
+    last_name: string;
+    is_approved: boolean;
+    is_profile_complete: boolean;
+  };
 }
 
 // ── Admin Platform Settings ──

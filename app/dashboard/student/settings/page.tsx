@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserPlus, Users, Check, X, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth-context";
-import { apiFetch, ApiError } from "@/lib/api";
-import type { Profile } from "@/lib/types";
+import { apiFetch, ApiError, childLinkApi } from "@/lib/api";
+import type { Profile, ParentChildLink } from "@/lib/types";
 
 export default function StudentSettingsPage() {
   const { user, tokens, fetchProfile } = useAuth();
@@ -25,6 +25,90 @@ export default function StudentSettingsPage() {
     newCourse: true,
     weeklyReport: false,
   });
+
+  const [links, setLinks] = useState<ParentChildLink[]>([]);
+  const [linksLoading, setLinksLoading] = useState(true);
+  const [parentEmail, setParentEmail] = useState("");
+  const [requesting, setRequesting] = useState(false);
+  const [linkActionId, setLinkActionId] = useState<number | null>(null);
+
+  const loadLinks = useCallback(async () => {
+    if (!tokens) return;
+    setLinksLoading(true);
+    try {
+      const res = await childLinkApi.getLinks(tokens.access);
+      setLinks(res.results ?? []);
+    } catch {
+      // silently swallow — not critical
+    } finally {
+      setLinksLoading(false);
+    }
+  }, [tokens]);
+
+  useEffect(() => { loadLinks(); }, [loadLinks]);
+
+  async function handleRequestParent(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tokens || !parentEmail.trim()) return;
+    setRequesting(true);
+    try {
+      await childLinkApi.requestLink(tokens.access, parentEmail.trim());
+      setParentEmail("");
+      toast.success("Request sent! Waiting for parent to approve.");
+      await loadLinks();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const msg = err.body.detail ?? err.body.parent_email ?? "Failed to send request.";
+        toast.error(typeof msg === "string" ? msg : "Failed to send request.");
+      } else {
+        toast.error("Something went wrong.");
+      }
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  async function handleAccept(linkId: number) {
+    if (!tokens) return;
+    setLinkActionId(linkId);
+    try {
+      await childLinkApi.acceptLink(tokens.access, linkId);
+      toast.success("Parent link accepted.");
+      await loadLinks();
+    } catch {
+      toast.error("Failed to accept link.");
+    } finally {
+      setLinkActionId(null);
+    }
+  }
+
+  async function handleDecline(linkId: number) {
+    if (!tokens) return;
+    setLinkActionId(linkId);
+    try {
+      await childLinkApi.declineLink(tokens.access, linkId);
+      toast.success("Request declined.");
+      await loadLinks();
+    } catch {
+      toast.error("Failed to decline request.");
+    } finally {
+      setLinkActionId(null);
+    }
+  }
+
+  async function handleRemove(linkId: number) {
+    if (!tokens) return;
+    setLinkActionId(linkId);
+    try {
+      await childLinkApi.removeLink(tokens.access, linkId);
+      toast.success("Parent link removed.");
+      await loadLinks();
+    } catch {
+      toast.error("Failed to remove link.");
+    } finally {
+      setLinkActionId(null);
+    }
+  }
 
   const loadProfile = useCallback(async () => {
     if (!tokens) return;
@@ -209,6 +293,119 @@ export default function StudentSettingsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Parent Links */}
+      <div className="mt-4 bg-white border-[1.5px] border-neutral-200 rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <Users className="w-4.5 h-4.5 text-primary" />
+          <div className="text-[.9rem] font-bold">Parent Links</div>
+        </div>
+
+        {/* Link a parent */}
+        <form onSubmit={handleRequestParent} className="flex gap-2 mb-5">
+          <input
+            type="email"
+            className="flex-1 px-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+            placeholder="Parent's email address"
+            value={parentEmail}
+            onChange={(e) => setParentEmail(e.target.value)}
+            required
+          />
+          <Button type="submit" variant="primary" loading={requesting}>
+            <Send className="w-3.5 h-3.5 mr-1.5" />
+            Send Request
+          </Button>
+        </form>
+
+        {linksLoading ? (
+          <div className="flex justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-neutral-400" />
+          </div>
+        ) : links.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-neutral-400">
+            <UserPlus className="w-7 h-7" />
+            <p className="text-[.82rem]">No parent links yet. Send a request above.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {links.map((link) => {
+              const parentName = `${link.parent.first_name} ${link.parent.last_name}`.trim() || link.parent.email;
+              const isActing = linkActionId === link.id;
+
+              return (
+                <div
+                  key={link.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 bg-neutral-50 rounded-xl"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
+                      {link.parent.email[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[.84rem] font-semibold truncate">{parentName}</div>
+                      <div className="text-[.75rem] text-neutral-500 truncate">{link.parent.email}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {link.status === "active" && (
+                      <>
+                        <span className="text-[.72rem] font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                          Active
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isActing}
+                          onClick={() => handleRemove(link.id)}
+                          className="text-[.75rem] text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2 py-1 transition-colors disabled:opacity-50"
+                        >
+                          {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Remove"}
+                        </button>
+                      </>
+                    )}
+
+                    {link.status === "pending_child_approval" && link.initiated_by === "parent" && (
+                      <>
+                        <span className="text-[.72rem] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
+                          Parent request
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isActing}
+                          onClick={() => handleAccept(link.id)}
+                          className="flex items-center gap-1 text-[.75rem] font-medium bg-green-50 text-green-700 hover:bg-green-100 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                        >
+                          {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" /> Accept</>}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isActing}
+                          onClick={() => handleDecline(link.id)}
+                          className="flex items-center gap-1 text-[.75rem] font-medium bg-red-50 text-red-600 hover:bg-red-100 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                        >
+                          <X className="w-3.5 h-3.5" /> Decline
+                        </button>
+                      </>
+                    )}
+
+                    {link.status === "pending_parent_approval" && link.initiated_by === "child" && (
+                      <span className="text-[.72rem] text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-full">
+                        Awaiting parent approval
+                      </span>
+                    )}
+
+                    {link.status === "declined" && (
+                      <span className="text-[.72rem] text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                        Declined
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

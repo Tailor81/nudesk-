@@ -118,15 +118,15 @@ export default function AdminRevenuePage() {
               const rows = breakdown.slice(0, 12).reverse();
               const maxGmv = Math.max(...rows.map((r) => Number(r.gmv)), 1);
               return rows.map((row) => {
-                const pct = (Number(row.gmv) / maxGmv) * 100;
+                const barH = Math.max((Number(row.gmv) / maxGmv) * 130, 4);
                 const label = new Date(row.month + "-01").toLocaleDateString("en-US", { month: "short" });
                 return (
                   <div key={row.month} className="flex-1 flex flex-col items-center gap-1">
                     <div className="text-[.65rem] font-bold text-neutral-600">{fmt(Number(row.gmv))}</div>
-                    <div className="w-full flex justify-center">
+                    <div className="w-full flex justify-center items-end flex-1">
                       <div
                         className="w-full max-w-[48px] bg-violet-500 rounded-t-md transition-all"
-                        style={{ height: `${Math.max(pct, 4)}%` }}
+                        style={{ height: `${barH}px` }}
                       />
                     </div>
                     <div className="text-[.65rem] text-neutral-500 font-medium">{label}</div>

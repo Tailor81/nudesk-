@@ -17,6 +17,7 @@ function getRedirectPath(user: {
 }): string {
   if (!user.is_profile_complete) return "/auth/profile-setup";
   if (user.role === "tutor" && !user.is_approved) return "/auth/pending-approval";
+  if (user.role === "admin") return "/dashboard/admin";
   return `/dashboard/${user.role}`;
 }
 

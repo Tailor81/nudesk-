@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Download, Share2, Loader2 } from "lucide-react";
+import { Download, Share2, Loader2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
@@ -15,10 +15,17 @@ const GRADIENTS = [
   "from-rose-600 to-rose-800",
 ];
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+function buildDownloadUrl(certificateId: string): string {
+  return `${API_URL}/courses/certificates/${certificateId}/download/`;
+}
+
 export default function StudentCertificatesPage() {
   const { tokens } = useAuth();
   const [certs, setCerts] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!tokens) return;
@@ -34,6 +41,35 @@ export default function StudentCertificatesPage() {
   }, [tokens]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleDownload = useCallback((cert: Certificate) => {
+    const url = buildDownloadUrl(cert.certificate_id);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `NuDesk_Certificate_${cert.course_title.replace(/\s+/g, "_")}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  }, []);
+
+  const handleShare = useCallback(async (cert: Certificate) => {
+    const url = buildDownloadUrl(cert.certificate_id);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback for browsers without clipboard API
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopiedId(cert.certificate_id);
+    setTimeout(() => setCopiedId(null), 2500);
+  }, []);
 
   if (loading) {
     return (
@@ -86,6 +122,7 @@ export default function StudentCertificatesPage() {
                     variant="ghost"
                     size="sm"
                     className="bg-white/15 text-white border-white/20 hover:bg-white/25"
+                    onClick={() => handleDownload(cert)}
                   >
                     <Download className="w-3 h-3" />
                     Download
@@ -94,9 +131,19 @@ export default function StudentCertificatesPage() {
                     variant="ghost"
                     size="sm"
                     className="bg-white/15 text-white border-white/20 hover:bg-white/25"
+                    onClick={() => handleShare(cert)}
                   >
-                    <Share2 className="w-3 h-3" />
-                    Share
+                    {copiedId === cert.certificate_id ? (
+                      <>
+                        <Check className="w-3 h-3" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-3 h-3" />
+                        Share
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

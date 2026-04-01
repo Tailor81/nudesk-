@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, ShieldCheck, GraduationCap, BookOpen } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, GraduationCap, BookOpen, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -85,7 +85,7 @@ function extractErrors(body: Record<string, unknown>): string {
 }
 
 export default function SignUpPage() {
-  const [tab, setTab] = useState<"student" | "tutor">("student");
+  const [tab, setTab] = useState<"student" | "tutor" | "parent">("student");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const toast = useToast();
@@ -183,6 +183,18 @@ export default function SignUpPage() {
           <BookOpen className="w-4 h-4" />
           Tutor
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("parent")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            tab === "parent"
+              ? "bg-white text-neutral-900 shadow-sm"
+              : "text-neutral-500 hover:text-neutral-700"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Parent
+        </button>
       </div>
 
       {tab === "tutor" && (
@@ -194,11 +206,20 @@ export default function SignUpPage() {
         </div>
       )}
 
+      {tab === "parent" && (
+        <div className="mb-4">
+          <Badge variant="orange">
+            <Users className="w-3 h-3 inline mr-1" />
+            Monitor &amp; support your child&apos;s learning
+          </Badge>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
         <div>
           <Label>Username</Label>
           <Input
-            placeholder={tab === "tutor" ? "dr_sarah" : "amara_k"}
+            placeholder={tab === "tutor" ? "dr_sarah" : tab === "parent" ? "parent_name" : "amara_k"}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
@@ -210,7 +231,7 @@ export default function SignUpPage() {
           <Input
             type="email"
             placeholder={
-              tab === "tutor" ? "you@university.edu" : "you@example.com"
+              tab === "tutor" ? "you@university.edu" : tab === "parent" ? "parent@example.com" : "you@example.com"
             }
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -290,7 +311,11 @@ export default function SignUpPage() {
           className="w-full"
           loading={loading}
         >
-          {tab === "tutor" ? "Submit Application" : "Create Student Account"}
+          {tab === "tutor"
+            ? "Submit Application"
+            : tab === "parent"
+            ? "Create Parent Account"
+            : "Create Student Account"}
         </Button>
 
         <p className="text-[.75rem] text-neutral-500 text-center">

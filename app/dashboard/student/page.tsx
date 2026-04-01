@@ -9,7 +9,18 @@ import {
   Play,
   Calendar,
   Loader2,
+  Users,
+  CreditCard,
+  type LucideIcon,
 } from "lucide-react";
+
+function getNotifStyle(type: string): { bg: string; color: string; Icon: LucideIcon } {
+  if (type.startsWith("parent_link")) return { bg: "bg-orange-50", color: "text-orange-500", Icon: Users };
+  if (type === "live_class_created" || type === "live_class_reminder") return { bg: "bg-violet-50", color: "text-primary", Icon: Play };
+  if (type === "payment_received") return { bg: "bg-green-50", color: "text-green-600", Icon: CreditCard };
+  if (type === "course_completed") return { bg: "bg-amber-50", color: "text-amber-600", Icon: Award };
+  return { bg: "bg-violet-50", color: "text-primary", Icon: Calendar };
+}
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -231,19 +242,22 @@ export default function StudentOverviewPage() {
               {activity.length === 0 && (
                 <p className="text-[.8rem] text-neutral-400">No recent activity.</p>
               )}
-              {activity.map((a) => (
-                <div key={a.id} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-violet-50 text-primary">
-                    <Calendar className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <div className="text-[.8rem] font-semibold">{a.title}</div>
-                    <div className="text-[.72rem] text-neutral-500">
-                      {new Date(a.created_at).toLocaleDateString()}
+              {activity.map((a) => {
+                const { bg, color, Icon } = getNotifStyle(a.notification_type);
+                return (
+                  <div key={a.id} className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${bg} ${color}`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="text-[.8rem] font-semibold">{a.title}</div>
+                      <div className="text-[.72rem] text-neutral-500">
+                        {new Date(a.created_at).toLocaleDateString()}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

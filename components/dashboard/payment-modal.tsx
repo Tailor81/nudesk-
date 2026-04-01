@@ -19,6 +19,8 @@ export interface PaymentModalProps {
   contentId: number;
   price: number | string;
   title: string;
+  /** Optional child id — used when a parent purchases on behalf of a child. */
+  childId?: number;
 }
 
 const METHODS: {
@@ -85,6 +87,7 @@ export function PaymentModal({
   contentId,
   price,
   title,
+  childId,
 }: PaymentModalProps) {
   const { tokens } = useAuth();
 
@@ -159,7 +162,11 @@ export function PaymentModal({
       await apiFetch("/payments/checkout/", {
         method: "POST",
         token: tokens.access,
-        body: JSON.stringify({ content_type: contentType, content_id: contentId }),
+        body: JSON.stringify({
+          content_type: contentType,
+          content_id: contentId,
+          ...(childId != null && { child_id: childId }),
+        }),
       });
       setProgress(100);
       await new Promise((r) => setTimeout(r, 350));

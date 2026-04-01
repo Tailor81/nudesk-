@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, Download } from "lucide-react";
+import { Search, Download, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalHead, ModalBody, ModalFoot } from "@/components/ui/modal";
@@ -9,9 +9,10 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { AdminUser, PaginatedResponse } from "@/lib/types";
 
-const roleColors: Record<string, "violet" | "orange"> = {
+const roleColors: Record<string, "violet" | "orange" | "green"> = {
   student: "violet",
   tutor: "orange",
+  parent: "green",
 };
 
 const avatarColors = [
@@ -42,6 +43,10 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [selected, setSelected] = useState<AdminUser | null>(null);
+  const [parentChildren, setParentChildren] = useState<
+    Array<{ id: number; email: string; first_name: string; last_name: string; linked_since: string }>
+  >([]);
+  const [parentChildrenLoading, setParentChildrenLoading] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     if (!tokens) return;
@@ -68,6 +73,21 @@ export default function AdminUsersPage() {
     const id = setTimeout(fetchUsers, 300);
     return () => clearTimeout(id);
   }, [fetchUsers]);
+
+  useEffect(() => {
+    if (!selected || selected.role !== "parent" || !tokens) {
+      setParentChildren([]);
+      return;
+    }
+    setParentChildrenLoading(true);
+    apiFetch<{ stats: { children: typeof parentChildren } }>(
+      `/admins/users/${selected.id}/`,
+      { token: tokens.access }
+    )
+      .then((data) => setParentChildren(data.stats?.children ?? []))
+      .catch(() => setParentChildren([]))
+      .finally(() => setParentChildrenLoading(false));
+  }, [selected, tokens]);
 
   async function handleSuspend(u: AdminUser) {
     if (!tokens) return;
@@ -149,6 +169,7 @@ export default function AdminUsersPage() {
             <option value="">All Roles</option>
             <option value="student">Students</option>
             <option value="tutor">Tutors</option>
+            <option value="parent">Parents</option>
           </select>
           <select
             className="h-[34px] px-3 text-[.82rem] border-[1.5px] border-neutral-200 rounded-xl bg-white focus:outline-none focus:border-violet-600 w-[140px]"
@@ -293,6 +314,34 @@ export default function AdminUsersPage() {
                   </div>
                 </div>
               </div>
+              {selected.role === "parent" && (
+                <div className="mt-4">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">
+                    <Users className="w-3.5 h-3.5" /> Linked Children
+                  </div>
+                  {parentChildrenLoading ? (
+                    <div className="text-xs text-neutral-400 py-2">Loading…</div>
+                  ) : parentChildren.length === 0 ? (
+                    <div className="text-xs text-neutral-400 py-2">No active links.</div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {parentChildren.map((child) => (
+                        <div key={child.id} className="flex items-center gap-2.5 px-3 py-2 bg-neutral-50 rounded-xl border border-neutral-200">
+                          <div className="w-6 h-6 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-[.65rem] font-bold flex-shrink-0">
+                            {child.first_name ? child.first_name[0].toUpperCase() : child.email[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[.8rem] font-semibold truncate">
+                              {child.first_name || child.last_name ? `${child.first_name} ${child.last_name}`.trim() : child.email}
+                            </div>
+                            <div className="text-[.7rem] text-neutral-500 truncate">{child.email}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </ModalBody>
             <ModalFoot>
               {selected.is_active ? (

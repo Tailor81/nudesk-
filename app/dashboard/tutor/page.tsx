@@ -136,7 +136,7 @@ export default function TutorOverviewPage() {
             <div className="flex items-end gap-3 h-[140px]">
               {chart.map((d, i) => {
                 const rev = parseFloat(d.revenue);
-                const pct = Math.max((rev / peakRevenue) * 100, 4);
+                const barH = Math.max((rev / peakRevenue) * 96, 4);
                 const isLast = i === chart.length - 1;
                 return (
                   <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
@@ -146,15 +146,17 @@ export default function TutorOverviewPage() {
                     >
                       {fmt(rev)}
                     </div>
-                    <div
-                      className="w-full rounded-lg"
-                      style={{
-                        height: `${pct}%`,
-                        background: isLast
-                          ? "linear-gradient(to top, var(--color-violet-600), var(--color-violet-400))"
-                          : "var(--color-violet-100)",
-                      }}
-                    />
+                    <div className="w-full flex items-end justify-center flex-1">
+                      <div
+                        className="w-full rounded-lg"
+                        style={{
+                          height: `${barH}px`,
+                          background: isLast
+                            ? "linear-gradient(to top, var(--color-violet-600), var(--color-violet-400))"
+                            : "var(--color-violet-100)",
+                        }}
+                      />
+                    </div>
                     <div
                       className="text-[.7rem] font-medium text-neutral-500"
                       style={isLast ? { color: "var(--color-violet-600)", fontWeight: 700 } : undefined}

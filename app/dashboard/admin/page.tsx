@@ -42,6 +42,7 @@ export default function AdminOverviewPage() {
         { icon: "💰", label: "GMV This Month", value: fmt(Number(data.gmv_monthly)), color: "bg-violet-50" },
         { icon: "👥", label: "Active Students", value: num(data.active_students), color: "bg-orange-50" },
         { icon: "⭐", label: "Active Tutors", value: num(data.active_tutors), color: "bg-green-50" },
+        { icon: "👪", label: "Active Parents", value: num(data.active_parents), color: "bg-blue-50" },
         { icon: "▶️", label: "Published Courses", value: num(data.published_courses), color: "bg-amber-50" },
       ]
     : [];
@@ -109,7 +110,7 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-6">
         {stats.map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-neutral-200 p-4">
             <div className={`w-8 h-8 rounded-lg ${s.color} flex items-center justify-center text-base mb-2`}>
@@ -134,15 +135,15 @@ export default function AdminOverviewPage() {
             {(() => {
               const maxGmv = Math.max(...chartData.map((r) => Number(r.gmv)), 1);
               return chartData.map((row) => {
-                const pct = (Number(row.gmv) / maxGmv) * 100;
+                const barH = Math.max((Number(row.gmv) / maxGmv) * 130, 4);
                 const label = new Date(row.month + "-01").toLocaleDateString("en-US", { month: "short" });
                 return (
                   <div key={row.month} className="flex-1 flex flex-col items-center gap-1">
                     <div className="text-[.65rem] font-bold text-neutral-600">{fmt(Number(row.gmv))}</div>
-                    <div className="w-full flex justify-center">
+                    <div className="w-full flex justify-center items-end flex-1">
                       <div
                         className="w-full max-w-[48px] bg-violet-500 rounded-t-md transition-all"
-                        style={{ height: `${Math.max(pct, 4)}%` }}
+                        style={{ height: `${barH}px` }}
                       />
                     </div>
                     <div className="text-[.65rem] text-neutral-500 font-medium">{label}</div>
@@ -174,6 +175,10 @@ export default function AdminOverviewPage() {
             <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
               <div className="text-2xl font-extrabold">{num(data.active_tutors)}</div>
               <div className="text-xs text-neutral-500 mt-1">Active Tutors</div>
+            </div>
+            <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <div className="text-2xl font-extrabold">{num(data.active_parents)}</div>
+              <div className="text-xs text-neutral-500 mt-1">Active Parents</div>
             </div>
             <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
               <div className="text-2xl font-extrabold">{num(data.published_courses)}</div>
