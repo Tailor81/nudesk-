@@ -8,6 +8,8 @@ import { apiFetch } from "@/lib/api";
 import type { LiveClass, Category, PaginatedResponse } from "@/lib/types";
 
 const STATUS_LABELS: Record<LiveClass["status"], string> = {
+  pending_review: "Pending Review",
+  rejected: "Rejected",
   scheduled: "Scheduled",
   live: "Live Now",
   completed: "Completed",
@@ -18,6 +20,8 @@ const STATUS_VARIANTS: Record<
   LiveClass["status"],
   "green" | "violet" | "neutral" | "red"
 > = {
+  pending_review: "neutral",
+  rejected: "red",
   scheduled: "violet",
   live: "green",
   completed: "neutral",

@@ -243,7 +243,7 @@ export default function ParentBrowsePage() {
               <div className="space-y-2">
                 {children.map((child) => (
                   <button
-                    key={child.id}
+                    key={child.child_id}
                     onClick={() => handleChildSelect(child)}
                     className="w-full flex items-center gap-3 p-3 border border-neutral-200 rounded-xl hover:border-orange-300 hover:bg-orange-50 transition-colors text-left"
                   >
@@ -289,7 +289,7 @@ export default function ParentBrowsePage() {
           contentId={selectedCourse.id}
           price={selectedCourse.price}
           title={selectedCourse.title}
-          childId={selectedChild.id}
+          childId={selectedChild.child_id}
         />
       )}
     </div>

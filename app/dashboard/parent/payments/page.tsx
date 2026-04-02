@@ -97,7 +97,7 @@ export default function ParentPaymentsPage() {
           >
             <option value="all">All Children</option>
             {children.map((c) => (
-              <option key={c.id} value={c.id}>
+              <option key={c.child_id} value={c.child_id}>
                 {c.first_name} {c.last_name}
               </option>
             ))}
