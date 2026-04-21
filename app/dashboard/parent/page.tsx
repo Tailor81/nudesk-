@@ -73,7 +73,7 @@ export default function ParentOverviewPage() {
     },
     {
       label: "Total Spent",
-      value: `P${parseFloat(dash.total_spent).toLocaleString("en-BW", {
+      value: `R${parseFloat(dash.total_spent).toLocaleString("en-ZA", {
         minimumFractionDigits: 2,
       })}`,
       icon: <CreditCard className="w-5 h-5 text-amber-500" />,
