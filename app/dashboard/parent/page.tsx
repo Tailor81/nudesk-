@@ -73,7 +73,7 @@ export default function ParentOverviewPage() {
     },
     {
       label: "Total Spent",
-      value: `R${parseFloat(dash.total_spent).toLocaleString("en-ZA", {
+      value: `BWP ${parseFloat(dash.total_spent).toLocaleString("en-BW", {
         minimumFractionDigits: 2,
       })}`,
       icon: <CreditCard className="w-5 h-5 text-amber-500" />,
@@ -95,7 +95,7 @@ export default function ParentOverviewPage() {
       {/* Welcome */}
       <div>
         <h2 className="text-2xl font-bold text-neutral-900">
-          Welcome back, {firstName} 👋
+          Welcome back, {firstName}
         </h2>
         <p className="text-sm text-neutral-500 mt-1">
           Here&apos;s a snapshot of your children&apos;s learning progress.

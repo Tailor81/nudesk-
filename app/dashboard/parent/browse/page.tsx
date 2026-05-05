@@ -25,7 +25,7 @@ const GRADIENTS = [
   "from-green-50 to-emerald-100",
   "from-amber-50 to-amber-100",
 ];
-const EMOJIS = ["📐", "⚛️", "🧪", "💻"];
+const EMOJIS = ["M", "P", "S", "T"];
 
 export default function ParentBrowsePage() {
   const { tokens } = useAuth();
@@ -186,7 +186,7 @@ export default function ParentBrowsePage() {
                   <span className="text-base font-bold text-neutral-900">
                     {course.is_free
                       ? "Free"
-                      : `P${parseFloat(course.price).toLocaleString("en-BW", {
+                      : `BWP ${parseFloat(course.price).toLocaleString("en-BW", {
                           minimumFractionDigits: 2,
                         })}`}
                   </span>
