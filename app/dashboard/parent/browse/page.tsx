@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   Loader2,
@@ -14,10 +14,17 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { parentApi } from "@/lib/api";
+import { parentApi, paymentApi, ApiError } from "@/lib/api";
 import { PaymentModal } from "@/components/dashboard/payment-modal";
 import { useToast } from "@/components/ui/toast";
-import type { Course, ChildSummary, PaginatedResponse } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import type {
+  Course,
+  ChildSummary,
+  PaginatedResponse,
+  ParentPreference,
+  TutorSubscription,
+} from "@/lib/types";
 
 const GRADIENTS = [
   "from-violet-50 to-violet-100",
@@ -28,11 +35,15 @@ const GRADIENTS = [
 const EMOJIS = ["M", "P", "S", "T"];
 
 export default function ParentBrowsePage() {
+  const router = useRouter();
   const { tokens } = useAuth();
   const toast = useToast();
+  const accessToken = tokens?.access;
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [children, setChildren] = useState<ChildSummary[]>([]);
+  const [preferences, setPreferences] = useState<ParentPreference | null>(null);
+  const [subscriptions, setSubscriptions] = useState<TutorSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -40,30 +51,45 @@ export default function ParentBrowsePage() {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedChild, setSelectedChild] = useState<ChildSummary | null>(null);
+  const [selectorWorking, setSelectorWorking] = useState(false);
 
   // Payment modal state
   const [payOpen, setPayOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!tokens) return;
-    setLoading(true);
-    try {
-      const [coursesData, childrenData] = await Promise.all([
-        apiFetch<PaginatedResponse<Course>>("/courses/"),
-        parentApi.getChildren(tokens.access),
-      ]);
-      setCourses(coursesData.results ?? []);
-      setChildren(childrenData);
-    } catch {
-      toast.error("Failed to load courses.");
-    } finally {
-      setLoading(false);
-    }
-  }, [tokens, toast]);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!accessToken) return;
+    let cancelled = false;
+
+    async function load(token: string) {
+      setLoading(true);
+      try {
+        const [coursesData, childrenData] = await Promise.all([
+          apiFetch<PaginatedResponse<Course>>("/courses/"),
+          parentApi.getChildren(token),
+        ]);
+        const [preferenceData, subscriptionData] = await Promise.all([
+          parentApi.getPreferences(token),
+          paymentApi.getMySubscriptions(token),
+        ]);
+        if (cancelled) return;
+        setCourses(coursesData.results ?? []);
+        setChildren(childrenData);
+        setPreferences(preferenceData);
+        setSubscriptions(
+          Array.isArray(subscriptionData) ? subscriptionData : subscriptionData.results ?? []
+        );
+      } catch {
+        if (!cancelled) toast.error("Failed to load courses.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load(accessToken);
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, toast]);
 
   const filtered = courses.filter(
     (c) =>
@@ -72,20 +98,116 @@ export default function ParentBrowsePage() {
       c.category_name.toLowerCase().includes(search.toLowerCase())
   );
 
+  function hasTutorSubscription(course: Course, childId: number) {
+    return subscriptions.some(
+      (subscription) =>
+        (subscription.student === childId || subscription.student == null) &&
+        subscription.tutor === course.tutor &&
+        subscription.is_currently_active
+    );
+  }
+
+  function matchingSubscription(course: Course, childId: number) {
+    return (
+      subscriptions.find(
+        (item) =>
+          item.student === childId &&
+          item.tutor === course.tutor &&
+          item.is_currently_active
+      ) ??
+      subscriptions.find(
+        (item) =>
+          item.student == null &&
+          item.tutor === course.tutor &&
+          item.is_currently_active
+      ) ??
+      null
+    );
+  }
+
+  function accessHref(course: Course, childId: number, subscription?: TutorSubscription | null) {
+    const params = new URLSearchParams({
+      tutor: String(course.tutor),
+      child: String(childId),
+      course: course.slug,
+    });
+    if (subscription?.reference) params.set("subscription", subscription.reference);
+    return `/dashboard/parent/access?${params.toString()}`;
+  }
+
+  async function enrollChild(course: Course, child: ChildSummary) {
+    if (!tokens) return;
+    try {
+      await parentApi.enrollChildInCourse(tokens.access, child.child_id, course.slug);
+      toast.success(`${child.first_name} was enrolled in ${course.title}.`);
+      setSelectedChild(null);
+      setSelectedCourse(null);
+      setSelectorOpen(false);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && typeof err.body?.detail === "string"
+          ? err.body.detail
+          : "Failed to enroll child in this course.";
+      toast.error(msg);
+    }
+  }
+
   function openEnroll(course: Course) {
     setSelectedCourse(course);
+    if (children.length === 0) {
+      if (course.is_free) {
+        toast.error("Invite or link a child first to enroll them.");
+        return;
+      }
+      setSelectedChild(null);
+      setPayOpen(true);
+      return;
+    }
     if (children.length === 1) {
-      setSelectedChild(children[0]);
+      const child = children[0];
+      setSelectedChild(child);
+      if (course.is_free) {
+        void enrollChild(course, child);
+        return;
+      }
+      if (hasTutorSubscription(course, child.child_id)) {
+        void (async () => {
+          await enrollChild(course, child);
+          router.push(accessHref(course, child.child_id));
+        })();
+        return;
+      }
       setPayOpen(true);
     } else {
+      setSelectedChild(children[0] ?? null);
       setSelectorOpen(true);
     }
   }
 
-  function handleChildSelect(child: ChildSummary) {
-    setSelectedChild(child);
-    setSelectorOpen(false);
-    setPayOpen(true);
+  async function confirmChildSelection() {
+    if (!selectedCourse || !selectedChild) return;
+    setSelectorWorking(true);
+    try {
+      if (selectedCourse.is_free) {
+        await enrollChild(selectedCourse, selectedChild);
+        return;
+      }
+      if (hasTutorSubscription(selectedCourse, selectedChild.child_id)) {
+        const subscription = matchingSubscription(
+          selectedCourse,
+          selectedChild.child_id
+        );
+        await enrollChild(selectedCourse, selectedChild);
+        router.push(
+          accessHref(selectedCourse, selectedChild.child_id, subscription)
+        );
+        return;
+      }
+      setSelectorOpen(false);
+      setPayOpen(true);
+    } finally {
+      setSelectorWorking(false);
+    }
   }
 
   return (
@@ -95,7 +217,7 @@ export default function ParentBrowsePage() {
           Browse &amp; Enroll
         </h2>
         <p className="text-sm text-neutral-500 mt-1">
-          Find courses and enroll your children.
+          Subscribe children to tutors and enroll them into the right courses.
         </p>
       </div>
 
@@ -186,23 +308,31 @@ export default function ParentBrowsePage() {
                   <span className="text-base font-bold text-neutral-900">
                     {course.is_free
                       ? "Free"
-                      : `BWP ${parseFloat(course.price).toLocaleString("en-BW", {
+                      : course.subscription_plan &&
+                        Number(course.subscription_plan.monthly_price) > 0
+                      ? `From BWP ${parseFloat(
+                          course.subscription_plan.monthly_price
+                        ).toLocaleString("en-BW", {
                           minimumFractionDigits: 2,
-                        })}`}
+                        })}/mo`
+                      : "Subscription"}
                   </span>
                   <button
                     onClick={() => openEnroll(course)}
-                    disabled={children.length === 0}
                     className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-[10px] text-xs font-semibold transition-colors"
                   >
                     <ShoppingCart className="w-3.5 h-3.5" />
-                    Enroll
+                    {course.is_free
+                      ? "Enroll"
+                      : children.length === 1 && hasTutorSubscription(course, children[0].child_id)
+                      ? "Assign"
+                      : "Subscribe"}
                   </button>
                 </div>
 
                 {children.length === 0 && (
                   <p className="text-[.7rem] text-neutral-400 mt-1.5">
-                    Link a child first to enroll them.
+                    Paid tutor access can be subscribed now and assigned to a child later.
                   </p>
                 )}
               </div>
@@ -246,8 +376,12 @@ export default function ParentBrowsePage() {
                 {children.map((child) => (
                   <button
                     key={child.child_id}
-                    onClick={() => handleChildSelect(child)}
-                    className="w-full flex items-center gap-3 p-3 border border-neutral-200 rounded-xl hover:border-orange-300 hover:bg-orange-50 transition-colors text-left"
+                    onClick={() => setSelectedChild(child)}
+                    className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+                      selectedChild?.child_id === child.child_id
+                        ? "border-orange-400 bg-orange-50"
+                        : "border-neutral-200 hover:border-orange-300 hover:bg-orange-50"
+                    }`}
                   >
                     <div className="w-9 h-9 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
                       {child.first_name[0]}
@@ -260,10 +394,44 @@ export default function ParentBrowsePage() {
                       <p className="text-xs text-neutral-400 truncate">
                         {child.email}
                       </p>
+                      <p className="mt-1 text-[.7rem] text-neutral-500">
+                        {selectedCourse?.is_free
+                          ? "Free course"
+                          : selectedCourse && hasTutorSubscription(selectedCourse, child.child_id)
+                          ? "Subscription active"
+                          : "Needs subscription"}
+                      </p>
                     </div>
                     <ChevronDown className="w-4 h-4 text-neutral-300 ml-auto rotate-[-90deg] flex-shrink-0" />
                   </button>
                 ))}
+
+                <div className="pt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectorOpen(false);
+                      setSelectedChild(null);
+                    }}
+                    className="rounded-xl border border-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-600 transition-colors hover:bg-neutral-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedChild || selectorWorking}
+                    onClick={() => void confirmChildSelection()}
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {selectorWorking
+                      ? "Saving..."
+                      : selectedCourse?.is_free
+                      ? "Save & Enroll"
+                      : selectedChild && selectedCourse && hasTutorSubscription(selectedCourse, selectedChild.child_id)
+                      ? "Save & Assign"
+                      : "Continue to Subscribe"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -279,19 +447,63 @@ export default function ParentBrowsePage() {
             setSelectedChild(null);
             setSelectedCourse(null);
           }}
-          onSuccess={() => {
-            toast.success(
-              `${selectedChild.first_name} has been enrolled in ${selectedCourse.title}!`
-            );
+          onSuccess={(result) => {
+            void (async () => {
+              if (!tokens) return;
+              const shouldAutoAssign =
+                (preferences?.auto_assign_single_child ?? true) &&
+                children.length === 1;
+              if (shouldAutoAssign) {
+                try {
+                  await parentApi.enrollChildInCourse(
+                    tokens.access,
+                    selectedChild.child_id,
+                    selectedCourse.slug
+                  );
+                  toast.success(
+                    `${selectedChild.first_name} now has the tutor subscription and ${selectedCourse.title} was assigned automatically.`
+                  );
+                } catch {
+                  toast.error("Subscription worked, but this course still needs to be assigned manually.");
+                }
+              } else {
+                toast.success(
+                  "Subscription activated. Now choose which materials this child should start with."
+                );
+              }
+              setPayOpen(false);
+              setSelectedChild(null);
+              setSelectedCourse(null);
+              router.push(
+                accessHref(selectedCourse, selectedChild.child_id, result.subscription ?? null)
+              );
+            })();
+          }}
+          tutorId={selectedCourse.tutor}
+          tutorName={selectedCourse.tutor_name}
+          title={selectedCourse.title}
+          plan={selectedCourse.subscription_plan}
+          childId={selectedChild.child_id}
+          beneficiaryLabel={`${selectedChild.first_name} ${selectedChild.last_name}`}
+        />
+      )}
+
+      {selectedCourse && !selectedChild && (
+        <PaymentModal
+          open={payOpen}
+          onClose={() => {
             setPayOpen(false);
-            setSelectedChild(null);
             setSelectedCourse(null);
           }}
-          contentType="course"
-          contentId={selectedCourse.id}
-          price={selectedCourse.price}
+          onSuccess={() => {
+            toast.success("Subscription activated. Invite or link a child to start assigning content.");
+            setPayOpen(false);
+            setSelectedCourse(null);
+          }}
+          tutorId={selectedCourse.tutor}
+          tutorName={selectedCourse.tutor_name}
           title={selectedCourse.title}
-          childId={selectedChild.child_id}
+          plan={selectedCourse.subscription_plan}
         />
       )}
     </div>

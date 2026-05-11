@@ -78,7 +78,7 @@ export default function AdminRevenuePage() {
   }
 
   const stats = [
-    { icon: <Wallet className="w-4 h-4" />, label: "GMV This Month", value: fmt(Number(overview.gmv_monthly)), sub: `YTD: ${fmt(Number(overview.gmv_ytd))}`, color: "bg-violet-50 text-violet-600" },
+    { icon: <Wallet className="w-4 h-4" />, label: "Earnings This Month", value: fmt(Number(overview.gmv_monthly)), sub: `YTD: ${fmt(Number(overview.gmv_ytd))}`, color: "bg-violet-50 text-violet-600" },
     { icon: <CreditCard className="w-4 h-4" />, label: "Platform Commission", value: fmt(Number(overview.commission_monthly)), sub: `YTD: ${fmt(Number(overview.commission_ytd))}`, color: "bg-orange-50 text-orange-600" },
     { icon: <BadgeDollarSign className="w-4 h-4" />, label: "YTD GMV", value: fmt(Number(overview.gmv_ytd)), sub: `${overview.total_transactions.toLocaleString()} transactions`, color: "bg-green-50 text-green-600" },
     { icon: <UserCheck className="w-4 h-4" />, label: "Avg Revenue / User", value: overview.avg_revenue_per_user ? `BWP ${Number(overview.avg_revenue_per_user).toFixed(2)}` : "—", sub: `+${overview.new_students_monthly} students this month`, color: "bg-amber-50 text-amber-600" },
@@ -112,7 +112,7 @@ export default function AdminRevenuePage() {
       {/* Revenue Chart */}
       {breakdown.length > 0 && (
         <div className="bg-white rounded-2xl border border-neutral-200 p-5 mb-5">
-          <div className="text-[.9rem] font-bold mb-4">Revenue Trend</div>
+          <div className="text-[.9rem] font-bold mb-4">Subscription Revenue Trend</div>
           <div className="flex items-end gap-2 h-[180px]">
             {(() => {
               const rows = breakdown.slice(0, 12).reverse();

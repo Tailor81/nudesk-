@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Wallet, Users, BookOpen, Star, Book, Video, MonitorPlay, FileText, LayoutDashboard } from "lucide-react";
+import { AlertCircle, Wallet, Users, BookOpen, Star, Book, Video, MonitorPlay, FileText, LayoutDashboard } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import type { TutorDashboard, MonthlyRevenue, PaginatedResponse } from "@/lib/types";
+import Link from "next/link";
 
 interface TopCourse {
   id: number;
@@ -67,6 +68,16 @@ export default function TutorOverviewPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!dashboard || dashboard.payments_ready === true) return;
+    const storageKey = `nudesk:tutor-payments-readiness:${profile?.id ?? "me"}`;
+    if (window.sessionStorage.getItem(storageKey)) return;
+    toast.info(
+      "Set your subscription fees in Payments first. Course, guide, and live-session creation stays locked until then."
+    );
+    window.sessionStorage.setItem(storageKey, "seen");
+  }, [dashboard, profile?.id, toast]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -89,9 +100,9 @@ export default function TutorOverviewPage() {
   const displayName = profile?.first_name || "Tutor";
 
   const stats = [
-    { icon: <Wallet className="w-4 h-4" />, label: "Monthly Earnings", value: fmt(dashboard.monthly_earnings), color: "bg-orange-50 text-orange-600" },
-    { icon: <Users className="w-4 h-4" />, label: "Active Students", value: String(dashboard.active_students), color: "bg-violet-50 text-violet-600" },
-    { icon: <BookOpen className="w-4 h-4" />, label: "Published Courses", value: String(dashboard.published_courses), color: "bg-green-50 text-green-600" },
+    { icon: <Wallet className="w-4 h-4" />, label: "Monthly Revenue", value: fmt(dashboard.monthly_earnings), color: "bg-orange-50 text-orange-600" },
+    { icon: <Users className="w-4 h-4" />, label: "Active Subscribers", value: String(dashboard.active_subscriptions), color: "bg-violet-50 text-violet-600" },
+    { icon: <BookOpen className="w-4 h-4" />, label: "Active Students", value: String(dashboard.active_students), color: "bg-green-50 text-green-600" },
     { icon: <Star className="w-4 h-4" />, label: "Avg Rating", value: dashboard.average_rating ? String(dashboard.average_rating) : "—", color: "bg-amber-50 text-amber-600" },
   ];
 
@@ -113,9 +124,31 @@ export default function TutorOverviewPage() {
           Welcome back, {displayName}
         </h2>
         <p className="text-[.875rem] text-neutral-500 mt-1">
-          Here&apos;s how your content is performing this month.
+          Here&apos;s how your subscriptions and content are performing this month.
         </p>
       </div>
+
+      {!dashboard.payments_ready && (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 md:p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-neutral-900">Partial account readiness</div>
+                <p className="mt-1 max-w-2xl text-sm text-neutral-600">
+                  Your tutor account is active, but content creation is locked until you set at least one
+                  weekly, monthly, or yearly subscription fee in Payments.
+                </p>
+              </div>
+            </div>
+            <Link href="/dashboard/tutor/payments" className="shrink-0">
+              <Button variant="primary" size="sm">Set Fees</Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
@@ -194,7 +227,7 @@ export default function TutorOverviewPage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-[.8rem] font-semibold truncate">{c.title}</div>
                       <div className="text-[.72rem] text-neutral-500">
-                        {c.student_count} students · {fmt(c.revenue)}/mo
+                        {c.student_count} students enrolled
                       </div>
                     </div>
                     {c.average_rating && (

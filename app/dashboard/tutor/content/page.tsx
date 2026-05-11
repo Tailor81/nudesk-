@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal, ModalHead, ModalBody, ModalFoot } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
-import { AlertCircle, BookOpen, Check, Edit2, ExternalLink, FileText, HelpCircle, ImageIcon, Loader2, Pencil, Plus, Radio, Trash2, Upload, Video } from "lucide-react";
+import { AlertCircle, BookOpen, Check, Edit2, ExternalLink, FileText, HelpCircle, ImageIcon, Loader2, Pencil, Plus, Radio, Search, Trash2, Upload, Video } from "lucide-react";
 import Link from "next/link";
 import { ScheduleLiveModal } from "@/components/dashboard/schedule-live-modal";
 import { useAuth } from "@/lib/auth-context";
-import { apiFetch, apiUpload, ApiError } from "@/lib/api";
-import type { TutorCourse, TutorStudyGuide, Category, CourseModule, LiveClass, PaginatedResponse, QuizQuestion } from "@/lib/types";
+import { apiFetch, apiUpload, tutorApi, ApiError } from "@/lib/api";
+import type { TutorCourse, TutorStudyGuide, Category, CourseModule, LiveClass, PaginatedResponse, QuizQuestion, SubscriptionPlan } from "@/lib/types";
 
 type Tab = "courses" | "live" | "guides";
 
@@ -29,14 +29,51 @@ const statusLabel: Record<string, string> = {
   rejected: "Rejected",
 };
 
+const moduleTypeMeta = {
+  video: {
+    label: "Video",
+    icon: Video,
+    helper: "External lesson link or uploaded lesson video",
+  },
+  // reading: {
+  //   label: "Reading",
+  //   icon: BookOpen,
+  //   helper: "Article, notes, or supporting resource link",
+  // },
+  document: {
+    label: "Document",
+    icon: FileText,
+    helper: "Uploaded PDF, DOCX, slides, or worksheet",
+  },
+  quiz: {
+    label: "Quiz",
+    icon: HelpCircle,
+    helper: "Knowledge checks and assessment questions",
+  },
+} as const;
+
+type ModuleContentType = keyof typeof moduleTypeMeta;
+
+function hasConfiguredSubscriptionPlan(plan: SubscriptionPlan | null) {
+  if (!plan) return false;
+  return [plan.weekly_price, plan.monthly_price, plan.yearly_price].some(
+    (value) => Number(value) > 0
+  );
+}
+
 export default function TutorContentPage() {
   const { tokens } = useAuth();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("courses");
+  const [paymentsReady, setPaymentsReady] = useState<boolean | null>(null);
 
   // Courses state
   const [courses, setCourses] = useState<TutorCourse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [courseCount, setCourseCount] = useState(0);
+  const [courseNext, setCourseNext] = useState<string | null>(null);
+  const [courseSearch, setCourseSearch] = useState("");
+  const [courseLoadingMore, setCourseLoadingMore] = useState(false);
   const [submitLoading, setSubmitLoading] = useState<string | null>(null);
 
   // Create course modal
@@ -80,13 +117,19 @@ export default function TutorContentPage() {
   // Live Sessions state
   const [liveSessions, setLiveSessions] = useState<LiveClass[]>([]);
   const [liveLoading, setLiveLoading] = useState(false);
-  const [liveFetched, setLiveFetched] = useState(false);
+  const [liveCount, setLiveCount] = useState(0);
+  const [liveNext, setLiveNext] = useState<string | null>(null);
+  const [liveSearch, setLiveSearch] = useState("");
+  const [liveLoadingMore, setLiveLoadingMore] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
   // Study Guides state
   const [guides, setGuides] = useState<TutorStudyGuide[]>([]);
   const [guidesLoading, setGuidesLoading] = useState(false);
-  const [guidesFetched, setGuidesFetched] = useState(false);
+  const [guideCount, setGuideCount] = useState(0);
+  const [guideNext, setGuideNext] = useState<string | null>(null);
+  const [guideSearch, setGuideSearch] = useState("");
+  const [guideLoadingMore, setGuideLoadingMore] = useState(false);
   const [guideCreateOpen, setGuideCreateOpen] = useState(false);
   const [guideSaving, setGuideSaving] = useState(false);
   const [guideDeleteLoading, setGuideDeleteLoading] = useState<string | null>(null);
@@ -109,9 +152,14 @@ export default function TutorContentPage() {
   const [moduleForm, setModuleForm] = useState({
     title: "",
     description: "",
-    content_types: ["video"] as string[],
+    content_types: ["video"] as ModuleContentType[],
     content_url: "",
     duration_minutes: "",
+  });
+  const [moduleTypeDescriptions, setModuleTypeDescriptions] = useState<Record<string, string>>({
+    video: "",
+    document: "",
+    quiz: "",
   });
   const [moduleFormErrors, setModuleFormErrors] = useState<Record<string, string>>({});
 
@@ -133,73 +181,170 @@ export default function TutorContentPage() {
     { id: "guides", label: "Study Guides" },
   ];
 
+  function getEndpointFromNext(nextUrl: string) {
+    const url = new URL(nextUrl);
+    return (url.pathname + url.search).replace(/^\/apis/, "");
+  }
+
+  const fetchPaymentReadiness = useCallback(async () => {
+    if (!tokens) return;
+    try {
+      const plan = await tutorApi.getSubscriptionPlan(tokens.access);
+      setPaymentsReady(hasConfiguredSubscriptionPlan(plan));
+    } catch {
+      setPaymentsReady(null);
+    }
+  }, [tokens]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void fetchPaymentReadiness();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [fetchPaymentReadiness]);
+
   const fetchCourses = useCallback(async () => {
     if (!tokens) return;
     setLoading(true);
     try {
-      const data = await apiFetch<PaginatedResponse<TutorCourse>>("/courses/my-courses/", {
+      const params = new URLSearchParams();
+      if (courseSearch.trim()) params.set("search", courseSearch.trim());
+      const endpoint = `/courses/my-courses/${params.toString() ? `?${params.toString()}` : ""}`;
+      const data = await apiFetch<PaginatedResponse<TutorCourse>>(endpoint, {
         token: tokens.access,
       });
       setCourses(data.results);
+      setCourseCount(data.count);
+      setCourseNext(data.next);
     } catch {
       toast.error("Failed to load courses.");
+      setCourses([]);
+      setCourseCount(0);
+      setCourseNext(null);
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokens]);
+  }, [courseSearch, toast, tokens]);
 
   useEffect(() => {
-    fetchCourses();
+    const id = window.setTimeout(() => {
+      void fetchCourses();
+    }, 250);
+    return () => window.clearTimeout(id);
   }, [fetchCourses]);
 
   const fetchGuides = useCallback(async () => {
     if (!tokens) return;
     setGuidesLoading(true);
     try {
-      const data = await apiFetch<PaginatedResponse<TutorStudyGuide>>("/courses/my-study-guides/", {
+      const params = new URLSearchParams();
+      if (guideSearch.trim()) params.set("search", guideSearch.trim());
+      const endpoint = `/courses/my-study-guides/${params.toString() ? `?${params.toString()}` : ""}`;
+      const data = await apiFetch<PaginatedResponse<TutorStudyGuide>>(endpoint, {
         token: tokens.access,
       });
       setGuides(data.results);
-      setGuidesFetched(true);
+      setGuideCount(data.count);
+      setGuideNext(data.next);
     } catch {
       toast.error("Failed to load study guides.");
+      setGuides([]);
+      setGuideCount(0);
+      setGuideNext(null);
     } finally {
       setGuidesLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokens]);
+  }, [guideSearch, toast, tokens]);
 
   const fetchLiveSessions = useCallback(async () => {
     if (!tokens) return;
     setLiveLoading(true);
     try {
-      const data = await apiFetch<PaginatedResponse<LiveClass>>("/courses/my-live-classes/", {
+      const params = new URLSearchParams();
+      params.set("status_group", "dashboard");
+      if (liveSearch.trim()) params.set("search", liveSearch.trim());
+      const data = await apiFetch<PaginatedResponse<LiveClass>>(`/courses/my-live-classes/?${params.toString()}`, {
         token: tokens.access,
       });
       setLiveSessions(data.results);
-      setLiveFetched(true);
+      setLiveCount(data.count);
+      setLiveNext(data.next);
     } catch {
       toast.error("Failed to load live sessions.");
+      setLiveSessions([]);
+      setLiveCount(0);
+      setLiveNext(null);
     } finally {
       setLiveLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokens]);
+  }, [tokens, liveSearch]);
 
   useEffect(() => {
-    if (tab === "live" && !liveFetched) {
-      fetchLiveSessions();
+    if (tab === "live") {
+      const id = window.setTimeout(() => {
+        void fetchLiveSessions();
+      }, 250);
+      return () => window.clearTimeout(id);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, fetchLiveSessions]);
 
   useEffect(() => {
-    if (tab === "guides" && !guidesFetched) {
-      fetchGuides();
+    if (tab === "guides") {
+      const id = window.setTimeout(() => {
+        void fetchGuides();
+      }, 250);
+      return () => window.clearTimeout(id);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, fetchGuides]);
+
+  async function loadMoreCourses() {
+    if (!courseNext || !tokens) return;
+    setCourseLoadingMore(true);
+    try {
+      const data = await apiFetch<PaginatedResponse<TutorCourse>>(getEndpointFromNext(courseNext), {
+        token: tokens.access,
+      });
+      setCourses((prev) => [...prev, ...data.results]);
+      setCourseNext(data.next);
+    } catch {
+      toast.error("Failed to load more courses.");
+    } finally {
+      setCourseLoadingMore(false);
+    }
+  }
+
+  async function loadMoreGuides() {
+    if (!guideNext || !tokens) return;
+    setGuideLoadingMore(true);
+    try {
+      const data = await apiFetch<PaginatedResponse<TutorStudyGuide>>(getEndpointFromNext(guideNext), {
+        token: tokens.access,
+      });
+      setGuides((prev) => [...prev, ...data.results]);
+      setGuideNext(data.next);
+    } catch {
+      toast.error("Failed to load more study guides.");
+    } finally {
+      setGuideLoadingMore(false);
+    }
+  }
+
+  async function loadMoreLiveSessions() {
+    if (!liveNext || !tokens) return;
+    setLiveLoadingMore(true);
+    try {
+      const data = await apiFetch<PaginatedResponse<LiveClass>>(getEndpointFromNext(liveNext), {
+        token: tokens.access,
+      });
+      setLiveSessions((prev) => [...prev, ...data.results]);
+      setLiveNext(data.next);
+    } catch {
+      toast.error("Failed to load more live sessions.");
+    } finally {
+      setLiveLoadingMore(false);
+    }
+  }
 
   // Fetch categories when any create modal opens
   useEffect(() => {
@@ -209,7 +354,38 @@ export default function TutorContentPage() {
       .catch(() => {});
   }, [createOpen, guideCreateOpen, scheduleOpen]);
 
-  const stepLabels = ["Course Details", "Set Pricing", "Review & Submit"];
+  const stepLabels = ["Course Details", "Set Access", "Review & Submit"];
+  const paymentsLocked = paymentsReady === false;
+  const paymentSetupMessage =
+    "Set your weekly, monthly, or yearly subscription fees in Payments before creating courses, study guides, or live sessions.";
+
+  function notifyPaymentsLocked() {
+    toast.info(paymentSetupMessage);
+  }
+
+  function openCreateCourse() {
+    if (paymentsLocked) {
+      notifyPaymentsLocked();
+      return;
+    }
+    setCreateOpen(true);
+  }
+
+  function openCreateGuide() {
+    if (paymentsLocked) {
+      notifyPaymentsLocked();
+      return;
+    }
+    setGuideCreateOpen(true);
+  }
+
+  function openCreateLiveSession() {
+    if (paymentsLocked) {
+      notifyPaymentsLocked();
+      return;
+    }
+    setScheduleOpen(true);
+  }
 
   function closeWizard() {
     setWizardStep(1);
@@ -227,9 +403,6 @@ export default function TutorContentPage() {
       if (!form.title.trim()) errors.title = "Title is required.";
       if (!form.description.trim()) errors.description = "Description is required.";
       if (!form.category) errors.category = "Category is required.";
-    } else if (step === 2) {
-      if (!form.is_free && (!form.price || Number(form.price) <= 0))
-        errors.price = "Price must be greater than 0.";
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -245,6 +418,10 @@ export default function TutorContentPage() {
   }
 
   async function saveCourse() {
+    if (paymentsLocked) {
+      notifyPaymentsLocked();
+      return;
+    }
     if (!tokens) return;
     setSaving(true);
     try {
@@ -253,10 +430,11 @@ export default function TutorContentPage() {
       fd.append("description", form.description.trim());
       fd.append("category", String(Number(form.category)));
       fd.append("is_free", String(form.is_free));
-      fd.append("price", form.is_free ? "0.00" : form.price);
+      fd.append("price", "0.00");
       if (coverImage) fd.append("cover_image", coverImage);
       await apiUpload<TutorCourse>("/courses/my-courses/", fd, { token: tokens.access });
-      toast.success("Course created! Add modules to submit for review.");
+      toast.success("Course created successfully.");
+      toast.warning("This course is saved as a draft. Add modules to submit it for review.");
       closeWizard();
       fetchCourses();
     } catch (e) {
@@ -308,13 +486,15 @@ export default function TutorContentPage() {
     if (!guideForm.description.trim()) errors.description = "Description is required.";
     if (!guideForm.category) errors.category = "Category is required.";
     if (!guideFile) errors.file = "Please upload a file for the study guide.";
-    if (!guideForm.is_free && (!guideForm.price || Number(guideForm.price) <= 0))
-      errors.price = "Price must be greater than 0 for paid guides.";
     setGuideFormErrors(errors);
     return Object.keys(errors).length === 0;
   }
 
   async function handleCreateGuide() {
+    if (paymentsLocked) {
+      notifyPaymentsLocked();
+      return;
+    }
     if (!tokens || !validateGuideForm() || !guideFile) return;
     setGuideSaving(true);
     try {
@@ -324,7 +504,7 @@ export default function TutorContentPage() {
       fd.append("category", guideForm.category);
       fd.append("file", guideFile);
       fd.append("is_free", String(guideForm.is_free));
-      fd.append("price", guideForm.is_free ? "0.00" : guideForm.price);
+      fd.append("price", "0.00");
       if (guideForm.page_count) fd.append("page_count", guideForm.page_count);
 
       const guide = await apiUpload<TutorStudyGuide>("/courses/my-study-guides/", fd, {
@@ -332,7 +512,6 @@ export default function TutorContentPage() {
       });
       void guide; // response from CreateUpdateSerializer lacks id/category_name; refetch full list
       toast.success("Study guide saved as draft. Submit it for review when ready.");
-      setGuidesFetched(false);
       await fetchGuides();
       closeGuideModal();
     } catch (e) {
@@ -378,6 +557,7 @@ export default function TutorContentPage() {
   function openNewModule() {
     setEditingModule(null);
     setModuleForm({ title: "", description: "", content_types: ["video"], content_url: "", duration_minutes: "" });
+    setModuleTypeDescriptions({ video: "", document: "", quiz: "" });
     setModuleFormErrors({});
     setModuleFile(null);
     if (moduleFileRef.current) moduleFileRef.current.value = "";
@@ -392,10 +572,13 @@ export default function TutorContentPage() {
     setModuleForm({
       title: mod.title,
       description: mod.description,
-      content_types: mod.content_type ? mod.content_type.split(",").filter(Boolean) : ["video"],
+      content_types: (mod.content_type
+        ? mod.content_type.split(",").filter(Boolean)
+        : ["video"]) as ModuleContentType[],
       content_url: mod.content_url,
       duration_minutes: mod.duration_minutes && mod.duration_minutes > 0 ? String(mod.duration_minutes) : "",
     });
+    setModuleTypeDescriptions({ video: "", document: "", quiz: "" });
     setModuleFormErrors({});
     setModuleFile(null);
     if (moduleFileRef.current) moduleFileRef.current.value = "";
@@ -424,15 +607,45 @@ export default function TutorContentPage() {
     setDraftQuizQuestions([]);
     setQuizEditorOpen(false);
     setEditingQuestion(null);
+    setModuleTypeDescriptions({ video: "", document: "", quiz: "" });
+  }
+
+  function buildMergedModuleDescription() {
+    const base = moduleForm.description.trim();
+    const pieces: string[] = [];
+
+    if (base) pieces.push(base);
+
+    const selected = moduleForm.content_types;
+    const sectionOrder: ModuleContentType[] = ["video", "document", "quiz"];
+    for (const type of sectionOrder) {
+      if (!selected.includes(type)) continue;
+      const raw = String(moduleTypeDescriptions[type] ?? "").trim();
+      if (!raw) continue;
+      pieces.push(`${type.charAt(0).toUpperCase() + type.slice(1)}: ${raw}`);
+    }
+
+    return pieces.join("\n\n");
   }
 
   function validateModuleForm(): boolean {
     const errors: Record<string, string> = {};
     if (!moduleForm.title.trim()) errors.title = "Title is required.";
+    if (
+      moduleForm.content_types.includes("quiz") &&
+      moduleForm.content_types.length > 1
+    ) {
+      errors.content_types =
+        "Quiz lessons must be standalone. Keep quiz in its own module.";
+    }
     if (moduleForm.content_types.includes("video") && !moduleForm.content_url.trim() && !videoFile)
       errors.content_url = "Provide a video URL or upload an MP4 file.";
     if (moduleForm.content_types.includes("document") && !editingModule && !moduleFile)
       errors.file = "Please upload a file for this module.";
+    if (moduleFile && videoFile) {
+      errors.file =
+        "Use the document upload for the document lesson, then add a video URL for the video lesson.";
+    }
     setModuleFormErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -548,19 +761,20 @@ export default function TutorContentPage() {
 
       let saved: CourseModule;
       const contentTypeStr = moduleForm.content_types.join(",");
+      const mergedDescription = buildMergedModuleDescription();
       const needsFormData = (moduleForm.content_types.includes("document") && (moduleFile || isEdit)) ||
                             (moduleForm.content_types.includes("video") && videoFile);
 
       if (needsFormData) {
         const fd = new FormData();
         fd.append("title", moduleForm.title.trim());
-        fd.append("description", moduleForm.description.trim());
+        fd.append("description", mergedDescription);
         fd.append("content_type", contentTypeStr);
         if (moduleForm.content_url.trim()) fd.append("content_url", moduleForm.content_url.trim());
         if (moduleForm.duration_minutes) fd.append("duration_minutes", moduleForm.duration_minutes);
         if (!isEdit) fd.append("order", String(nextOrder));
         if (moduleFile) fd.append("file", moduleFile);
-        if (videoFile) fd.append("file", videoFile);
+        else if (videoFile) fd.append("file", videoFile);
         saved = await apiUpload<CourseModule>(
           isEdit
             ? `/courses/my-courses/${manageCourse.slug}/modules/${editingModule!.id}/`
@@ -578,7 +792,7 @@ export default function TutorContentPage() {
             token: tokens.access,
             body: JSON.stringify({
               title: moduleForm.title.trim(),
-              description: moduleForm.description.trim(),
+              description: mergedDescription,
               content_type: contentTypeStr,
               content_url: moduleForm.content_url.trim(),
               duration_minutes: moduleForm.duration_minutes ? Number(moduleForm.duration_minutes) : 0,
@@ -688,24 +902,60 @@ export default function TutorContentPage() {
     }
   }
 
+  const selectedModuleTypes = moduleForm.content_types.map((type) => ({
+    type,
+    ...moduleTypeMeta[type],
+  }));
+  const hasVideoContent = moduleForm.content_types.includes("video");
+  const hasDocumentContent = moduleForm.content_types.includes("document");
+  const hasQuizContent = moduleForm.content_types.includes("quiz");
+  const usesSharedExternalLink = hasVideoContent;
+  const sharedLinkLabel = "Lesson Link";
+  const sharedLinkPlaceholder = "https://youtube.com/watch?v=...";
+  const sharedLinkDescription =
+    "Use a YouTube, Vimeo, Loom, or direct lesson URL.";
+
   return (
     <div>
+      {paymentsLocked && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-neutral-900">Creation locked until fees are set</div>
+                <p className="mt-1 max-w-2xl text-sm text-neutral-600">
+                  {paymentSetupMessage}
+                </p>
+              </div>
+            </div>
+            <Link href="/dashboard/tutor/payments" className="shrink-0">
+              <Button variant="primary" size="sm">Open Payments</Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h2 className="text-[1.3rem] font-extrabold tracking-[-0.02em]">My Content</h2>
         <div className="flex gap-2">
-          {tab === "courses" && (
-            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+          {paymentsLocked ? (
+            <Link href="/dashboard/tutor/payments">
+              <Button variant="primary" size="sm">Set Fees to Unlock</Button>
+            </Link>
+          ) : tab === "courses" ? (
+            <Button variant="primary" size="sm" onClick={openCreateCourse}>
               + New Course
             </Button>
-          )}
-          {tab === "live" && (
-            <Button variant="primary" size="sm" onClick={() => setScheduleOpen(true)}>
+          ) : tab === "live" ? (
+            <Button variant="primary" size="sm" onClick={openCreateLiveSession}>
               + Schedule Session
             </Button>
-          )}
-          {tab === "guides" && (
-            <Button variant="primary" size="sm" onClick={() => setGuideCreateOpen(true)}>
+          ) : (
+            <Button variant="primary" size="sm" onClick={openCreateGuide}>
               + New Guide
             </Button>
           )}
@@ -729,6 +979,42 @@ export default function TutorContentPage() {
         ))}
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <Input
+            value={
+              tab === "courses"
+                ? courseSearch
+                : tab === "guides"
+                ? guideSearch
+                : liveSearch
+            }
+            onChange={(e) => {
+              const value = e.target.value;
+              if (tab === "courses") setCourseSearch(value);
+              else if (tab === "guides") setGuideSearch(value);
+              else setLiveSearch(value);
+            }}
+            placeholder={
+              tab === "courses"
+                ? "Search courses by title, category, or status..."
+                : tab === "guides"
+                ? "Search study guides by title, category, or status..."
+                : "Search live sessions by title, category, or status..."
+            }
+            className="pl-9"
+          />
+        </div>
+        <div className="text-sm text-neutral-500">
+          {tab === "courses"
+            ? `${courseCount} courses`
+            : tab === "guides"
+            ? `${guideCount} guides`
+            : `${liveCount} sessions`}
+        </div>
+      </div>
+
       {/* Courses Tab */}
       {tab === "courses" && (
         loading ? (
@@ -739,67 +1025,80 @@ export default function TutorContentPage() {
           </div>
         ) : courses.length === 0 ? (
           <div className="bg-white rounded-2xl border border-neutral-200 p-12 text-center">
-            <p className="text-sm text-neutral-400">No courses yet. Create your first course!</p>
+            <p className="text-sm text-neutral-400">
+              {paymentsLocked
+                ? "Set your subscription fees in Payments before creating your first course."
+                : "No courses yet. Create your first course!"}
+            </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-neutral-200">
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Course</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Category</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Modules</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Price</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Status</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {courses.map((c) => (
-                  <tr key={c.id} className="border-b border-neutral-100 last:border-b-0">
-                    <td className="px-4 py-3">
-                      <div className="text-[.875rem] font-semibold">{c.title}</div>
-                      {c.average_rating != null && (
-                        <span className="text-[.75rem] text-amber-500 font-bold">{c.average_rating.toFixed(1)}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="violet">{c.category_name}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-[.82rem]">{c.module_count} modules</td>
-                    <td className="px-4 py-3 text-[.82rem] font-semibold">
-                      {c.is_free ? "Free" : `P${c.price}`}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={statusBadge[c.status] ?? "neutral"}>
-                        {statusLabel[c.status] ?? c.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => openManageCourse(c)}
-                        >
-                          Manage
-                        </Button>
-                        {(c.status === "draft" || c.status === "rejected") && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            loading={submitLoading === c.slug}
-                            onClick={() => handleSubmit(c.slug)}
-                          >
-                            Submit
-                          </Button>
-                        )}
-                      </div>
-                    </td>
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-neutral-200">
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Course</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Category</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Modules</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Access</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Status</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {courses.map((c) => (
+                    <tr key={c.id} className="border-b border-neutral-100 last:border-b-0">
+                      <td className="px-4 py-3">
+                        <div className="text-[.875rem] font-semibold">{c.title}</div>
+                        {c.average_rating != null && (
+                          <span className="text-[.75rem] text-amber-500 font-bold">{c.average_rating.toFixed(1)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant="violet">{c.category_name}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-[.82rem]">{c.module_count} modules</td>
+                      <td className="px-4 py-3 text-[.82rem] font-semibold">
+                        {c.is_free ? "Free" : "Subscription"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={statusBadge[c.status] ?? "neutral"}>
+                          {statusLabel[c.status] ?? c.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => openManageCourse(c)}
+                          >
+                            Manage
+                          </Button>
+                          {(c.status === "draft" || c.status === "rejected") && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              loading={submitLoading === c.slug}
+                              onClick={() => handleSubmit(c.slug)}
+                            >
+                              Submit
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {courseNext ? (
+              <div className="flex justify-center">
+                <Button variant="secondary" size="sm" loading={courseLoadingMore} onClick={loadMoreCourses}>
+                  Load more courses
+                </Button>
+              </div>
+            ) : null}
           </div>
         )
       )}
@@ -847,9 +1146,14 @@ export default function TutorContentPage() {
               <div className="bg-white rounded-2xl border border-neutral-200 p-10 text-center">
                 <AlertCircle className="w-7 h-7 text-neutral-300 mx-auto mb-2" />
                 <p className="text-sm font-medium text-neutral-500 mb-1">No live classes scheduled</p>
-                <p className="text-xs text-neutral-400">Click &quot;Schedule Session&quot; to create your first live class.</p>
+                <p className="text-xs text-neutral-400">
+                  {paymentsLocked
+                    ? "Set your subscription fees in Payments before scheduling your first live class."
+                    : "Click \"Schedule Session\" to create your first live class."}
+                </p>
               </div>
             ) : (
+              <div className="space-y-4">
               <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
                 <table className="w-full text-left">
                   <thead>
@@ -895,6 +1199,14 @@ export default function TutorContentPage() {
                   </tbody>
                 </table>
               </div>
+              {liveNext ? (
+                <div className="flex justify-center">
+                  <Button variant="secondary" size="sm" loading={liveLoadingMore} onClick={loadMoreLiveSessions}>
+                    Load more live sessions
+                  </Button>
+                </div>
+              ) : null}
+              </div>
             )}
           </>
         )
@@ -910,67 +1222,80 @@ export default function TutorContentPage() {
           </div>
         ) : guides.length === 0 ? (
           <div className="bg-white rounded-2xl border border-neutral-200 p-12 text-center">
-            <p className="text-sm text-neutral-400">No study guides yet. Upload your first guide!</p>
+            <p className="text-sm text-neutral-400">
+              {paymentsLocked
+                ? "Set your subscription fees in Payments before uploading your first study guide."
+                : "No study guides yet. Upload your first guide!"}
+            </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-neutral-200">
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Title</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Category</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Pages</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Price</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Status</th>
-                  <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Downloads</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {guides.map((g) => (
-                  <tr key={g.id} className="border-b border-neutral-100 last:border-b-0">
-                    <td className="px-4 py-3">
-                      <div className="text-[.875rem] font-semibold">{g.title}</div>
-                      <div className="text-[.75rem] text-neutral-400 line-clamp-1">{g.description}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="violet">{g.category_name}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-[.82rem]">{g.page_count || "—"}</td>
-                    <td className="px-4 py-3 text-[.82rem] font-semibold">
-                      {g.is_free ? "Free" : `P${g.price}`}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={statusBadge[g.status] ?? "neutral"}>
-                        {statusLabel[g.status] ?? g.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-[.82rem] text-neutral-500">{g.download_count}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {(g.status === "draft" || g.status === "rejected") && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            loading={submitLoading === g.slug}
-                            onClick={() => handleSubmitGuide(g.slug)}
-                          >
-                            Submit
-                          </Button>
-                        )}
-                        <button
-                          onClick={() => handleDeleteGuide(g.slug, g.title)}
-                          disabled={guideDeleteLoading === g.slug}
-                          className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-neutral-200">
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Title</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Category</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Pages</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Access</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Status</th>
+                    <th className="px-4 py-3 text-[.72rem] font-bold uppercase tracking-wider text-neutral-500">Downloads</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {guides.map((g) => (
+                    <tr key={g.id} className="border-b border-neutral-100 last:border-b-0">
+                      <td className="px-4 py-3">
+                        <div className="text-[.875rem] font-semibold">{g.title}</div>
+                        <div className="text-[.75rem] text-neutral-400 line-clamp-1">{g.description}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant="violet">{g.category_name}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-[.82rem]">{g.page_count || "—"}</td>
+                      <td className="px-4 py-3 text-[.82rem] font-semibold">
+                        {g.is_free ? "Free" : "Subscription"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={statusBadge[g.status] ?? "neutral"}>
+                          {statusLabel[g.status] ?? g.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-[.82rem] text-neutral-500">{g.download_count}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {(g.status === "draft" || g.status === "rejected") && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              loading={submitLoading === g.slug}
+                              onClick={() => handleSubmitGuide(g.slug)}
+                            >
+                              Submit
+                            </Button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteGuide(g.slug, g.title)}
+                            disabled={guideDeleteLoading === g.slug}
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {guideNext ? (
+              <div className="flex justify-center">
+                <Button variant="secondary" size="sm" loading={guideLoadingMore} onClick={loadMoreGuides}>
+                  Load more study guides
+                </Button>
+              </div>
+            ) : null}
           </div>
         )
       )}
@@ -1064,7 +1389,7 @@ export default function TutorContentPage() {
                   <input
                     type="checkbox"
                     checked={guideForm.is_free}
-                    onChange={(e) => setGuideForm({ ...guideForm, is_free: e.target.checked, price: e.target.checked ? "" : guideForm.price })}
+                    onChange={(e) => setGuideForm({ ...guideForm, is_free: e.target.checked, price: "" })}
                     className="w-4 h-4 rounded border-neutral-300 text-violet-600 focus:ring-violet-500"
                   />
                   Free guide
@@ -1073,21 +1398,13 @@ export default function TutorContentPage() {
             </div>
 
             {!guideForm.is_free && (
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">Price (BWP)</label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-neutral-400">P</span>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    placeholder="9.99"
-                    value={guideForm.price}
-                    onChange={(e) => { setGuideForm({ ...guideForm, price: e.target.value }); setGuideFormErrors((p) => ({ ...p, price: "" })); }}
-                    className="w-full pl-8 pr-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white text-neutral-900 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/10"
-                  />
-                </div>
-                {guideFormErrors.price && <p className="text-xs text-red-500 mt-1">{guideFormErrors.price}</p>}
+              <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+                <p className="text-sm font-semibold text-neutral-800">
+                  Subscriber-only guide
+                </p>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Learners unlock this guide through your tutor subscription plan. Update the actual rates from the Payments page.
+                </p>
               </div>
             )}
           </div>
@@ -1210,22 +1527,47 @@ export default function TutorContentPage() {
               {moduleFormErrors.title && <p className="text-xs text-red-500 mt-1">{moduleFormErrors.title}</p>}
             </div>
 
-            {/* Content Types — multi-select */}
+            {/* Module Description */}
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Content Type <span className="text-neutral-400 font-normal">(select all that apply)</span></label>
-              <div className="flex gap-2">
-                {(["video", "reading", "document", "quiz"] as const).map((ct) => {
-                  const Icon = ct === "video" ? Video : ct === "document" ? FileText : ct === "quiz" ? HelpCircle : BookOpen;
-                  const labels: Record<string, string> = { video: "Video", reading: "Reading", document: "Document", quiz: "Quiz" };
+              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                Module Description <span className="text-neutral-400 font-normal">(optional)</span>
+              </label>
+              <textarea
+                className="w-full h-20 p-3 text-sm border-[1.5px] border-neutral-200 rounded-xl bg-white resize-none focus:outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/10"
+                placeholder="What will students learn in this module?"
+                value={moduleForm.description}
+                onChange={(e) => setModuleForm({ ...moduleForm, description: e.target.value })}
+              />
+            </div>
+
+            {/* Content Types — constrained multi-select */}
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                Content Type{" "}
+                <span className="text-neutral-400 font-normal">
+                  (video and document can combine, quiz stands alone)
+                </span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(moduleTypeMeta) as ModuleContentType[]).map((ct) => {
+                  const meta = moduleTypeMeta[ct];
+                  const Icon = meta.icon;
                   const isActive = moduleForm.content_types.includes(ct);
                   return (
                     <button
                       key={ct}
                       type="button"
                       onClick={() => {
-                        const next = isActive
-                          ? moduleForm.content_types.filter((t) => t !== ct)
-                          : [...moduleForm.content_types, ct];
+                        let next: ModuleContentType[];
+                        if (isActive) {
+                          next = moduleForm.content_types.filter((t) => t !== ct);
+                        } else if (ct === "quiz") {
+                          next = ["quiz"];
+                        } else if (moduleForm.content_types.includes("quiz")) {
+                          next = [ct];
+                        } else {
+                          next = [...moduleForm.content_types, ct];
+                        }
                         if (next.length === 0) return; // must keep at least one
                         setModuleForm({ ...moduleForm, content_types: next });
                         if (ct === "quiz" && !isActive && editingModule && tokens && manageCourse && quizQuestions.length === 0) {
@@ -1243,83 +1585,148 @@ export default function TutorContentPage() {
                       }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
-                      {labels[ct]}
+                      {meta.label}
                     </button>
                   );
                 })}
               </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedModuleTypes.map(({ type, label, helper, icon: Icon }) => (
+                  <div
+                    key={type}
+                    className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700"
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span>{label}</span>
+                    <span className="text-violet-500/80">{helper}</span>
+                  </div>
+                ))}
+              </div>
+              {hasQuizContent && (
+                <p className="mt-3 text-xs text-amber-700">
+                  Quiz modules stay standalone so students get a dedicated quiz experience.
+                </p>
+              )}
+              {moduleFormErrors.content_types && (
+                <p className="mt-2 text-xs text-red-500">
+                  {moduleFormErrors.content_types}
+                </p>
+              )}
             </div>
 
-            {/* Video: URL + optional MP4 upload */}
-            {moduleForm.content_types.includes("video") && (
-              <div className="flex flex-col gap-3">
+            {usesSharedExternalLink && (
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4">
+                <div className="mb-3 flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-600 shadow-sm">
+                    <ExternalLink className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-neutral-900">{sharedLinkLabel}</div>
+                    <p className="mt-1 text-xs text-neutral-500">{sharedLinkDescription}</p>
+                    {hasVideoContent && hasDocumentContent && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        If this module also includes a document, use a video URL here so the document upload can keep its own file attachment.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    Video URL <span className="text-neutral-400 font-normal">(YouTube, Vimeo, or direct link)</span>
+                    {sharedLinkLabel}
+                    <span className="text-neutral-400 font-normal">
+                      {" (YouTube, Vimeo, Loom, or direct link)"}
+                    </span>
                   </label>
                   <Input
                     type="url"
-                    placeholder="https://youtube.com/watch?v=..."
+                    placeholder={sharedLinkPlaceholder}
                     value={moduleForm.content_url}
                     error={!!moduleFormErrors.content_url}
-                    onChange={(e) => { setModuleForm({ ...moduleForm, content_url: e.target.value }); setModuleFormErrors((p) => ({ ...p, content_url: "" })); }}
+                    onChange={(e) => {
+                      setModuleForm({ ...moduleForm, content_url: e.target.value });
+                      setModuleFormErrors((p) => ({ ...p, content_url: "" }));
+                    }}
                   />
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-neutral-200" />
-                  <span className="text-xs text-neutral-400 font-medium">or upload MP4</span>
-                  <div className="flex-1 h-px bg-neutral-200" />
-                </div>
-                <div>
-                  <div
-                    onClick={() => videoFileRef.current?.click()}
-                    className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors ${
-                      moduleFormErrors.content_url ? "border-red-400 bg-red-50" : "border-neutral-200 bg-neutral-50 hover:border-violet-400 hover:bg-violet-50"
-                    }`}
-                  >
-                    <Upload className="w-5 h-5 text-neutral-400" />
-                    {videoFile ? (
-                      <span className="text-sm font-semibold text-violet-700">{videoFile.name}</span>
-                    ) : editingModule?.file && !videoFile ? (
-                      <span className="text-sm text-green-600">Current video attached — click to replace</span>
-                    ) : (
-                      <span className="text-sm text-neutral-500">Click to select an MP4 file</span>
-                    )}
-                    <input
-                      ref={videoFileRef}
-                      type="file"
-                      accept="video/mp4,video/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] ?? null;
-                        setVideoFile(f);
-                        setModuleFormErrors((p) => ({ ...p, content_url: "" }));
-                      }}
-                    />
-                  </div>
                   {moduleFormErrors.content_url && <p className="text-xs text-red-500 mt-1">{moduleFormErrors.content_url}</p>}
                 </div>
+
+                {hasVideoContent && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">
+                      Video Description <span className="text-neutral-400 font-normal">(optional)</span>
+                    </label>
+                    <textarea
+                      className="w-full h-16 p-3 text-sm border-[1.5px] border-neutral-200 rounded-xl bg-white resize-none focus:outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/10"
+                      placeholder="Describe what this video covers"
+                      value={moduleTypeDescriptions.video}
+                      onChange={(e) => setModuleTypeDescriptions((prev) => ({ ...prev, video: e.target.value }))}
+                    />
+                  </div>
+                )}
+
+                {hasVideoContent && (
+                  <>
+                    <div className="my-4 flex items-center gap-3">
+                      <div className="flex-1 h-px bg-neutral-200" />
+                      <span className="text-xs text-neutral-400 font-medium">or upload MP4</span>
+                      <div className="flex-1 h-px bg-neutral-200" />
+                    </div>
+                    <div
+                      onClick={() => videoFileRef.current?.click()}
+                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors ${
+                        moduleFormErrors.content_url ? "border-red-400 bg-red-50" : "border-neutral-200 bg-white hover:border-violet-400 hover:bg-violet-50"
+                      }`}
+                    >
+                      <Upload className="w-5 h-5 text-neutral-400" />
+                      {videoFile ? (
+                        <span className="text-sm font-semibold text-violet-700">{videoFile.name}</span>
+                      ) : editingModule?.file && !videoFile ? (
+                        <span className="text-sm text-green-600">Current video attached — click to replace</span>
+                      ) : (
+                        <span className="text-sm text-neutral-500">Click to select an MP4 file</span>
+                      )}
+                      <input
+                        ref={videoFileRef}
+                        type="file"
+                        accept="video/mp4,video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          setVideoFile(f);
+                          setModuleFormErrors((p) => ({ ...p, content_url: "" }));
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
-            {/* Reading URL */}
-            {moduleForm.content_types.includes("reading") && (
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  External Link <span className="text-neutral-400 font-normal">(optional)</span>
-                </label>
-                <Input
-                  type="url"
-                  placeholder="https://example.com/article"
-                  value={moduleForm.content_url}
-                  onChange={(e) => setModuleForm({ ...moduleForm, content_url: e.target.value })}
-                />
-              </div>
-            )}
+            {hasDocumentContent && (
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4">
+                <div className="mb-3 flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-600 shadow-sm">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-neutral-900">Document Attachment</div>
+                    <p className="mt-1 text-xs text-neutral-500">Upload PDFs, DOCX files, slide decks, or any downloadable handout for this module.</p>
+                  </div>
+                </div>
 
-            {/* Document file upload */}
-            {moduleForm.content_types.includes("document") && (
-              <div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                    Document Description <span className="text-neutral-400 font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    className="w-full h-16 p-3 text-sm border-[1.5px] border-neutral-200 rounded-xl bg-white resize-none focus:outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/10"
+                    placeholder="Describe what students should look for in this document"
+                    value={moduleTypeDescriptions.document}
+                    onChange={(e) => setModuleTypeDescriptions((prev) => ({ ...prev, document: e.target.value }))}
+                  />
+                </div>
+
                 <label className="block text-sm font-medium text-neutral-700 mb-1">
                   File <span className="text-neutral-400 font-normal">(PDF, DOCX, PPTX, etc.)</span>
                   {editingModule?.file && !moduleFile && (
@@ -1329,7 +1736,7 @@ export default function TutorContentPage() {
                 <div
                   onClick={() => moduleFileRef.current?.click()}
                   className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors ${
-                    moduleFormErrors.file ? "border-red-400 bg-red-50" : "border-neutral-200 bg-neutral-50 hover:border-violet-400 hover:bg-violet-50"
+                    moduleFormErrors.file ? "border-red-400 bg-red-50" : "border-neutral-200 bg-white hover:border-violet-400 hover:bg-violet-50"
                   }`}
                 >
                   <Upload className="w-5 h-5 text-neutral-400" />
@@ -1354,11 +1761,18 @@ export default function TutorContentPage() {
               </div>
             )}
 
-            {/* Quiz questions builder */}
-            {moduleForm.content_types.includes("quiz") && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-neutral-700">Questions</label>
+            {hasQuizContent && (
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-600 shadow-sm">
+                      <HelpCircle className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-900">Quiz Questions</div>
+                      <p className="mt-1 text-xs text-neutral-500">Add knowledge checks to the module so students can test their understanding as they go.</p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={() => openQuestionEditor()}
@@ -1367,20 +1781,32 @@ export default function TutorContentPage() {
                     <Plus className="w-3 h-3" /> Add Question
                   </button>
                 </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                    Quiz Description <span className="text-neutral-400 font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    className="w-full h-16 p-3 text-sm border-[1.5px] border-neutral-200 rounded-xl bg-white resize-none focus:outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/10"
+                    placeholder="Describe what students will be tested on"
+                    value={moduleTypeDescriptions.quiz}
+                    onChange={(e) => setModuleTypeDescriptions((prev) => ({ ...prev, quiz: e.target.value }))}
+                  />
+                </div>
                 {quizLoading ? (
                   <div className="flex items-center justify-center py-6">
                     <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
                   </div>
                 ) : editingModule ? (
                   quizQuestions.length === 0 ? (
-                    <div className="bg-neutral-50 border border-dashed border-neutral-200 rounded-xl p-5 text-center">
+                    <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-5 text-center">
                       <HelpCircle className="w-6 h-6 text-neutral-300 mx-auto mb-1" />
                       <p className="text-sm text-neutral-400">No questions yet.</p>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
                       {quizQuestions.map((q, i) => (
-                        <div key={q.id} className="flex items-start gap-3 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5">
+                        <div key={q.id} className="flex items-start gap-3 bg-white border border-neutral-200 rounded-xl px-3 py-2.5">
                           <span className="mt-0.5 text-xs font-bold text-neutral-400 shrink-0">Q{i + 1}</span>
                           <p className="flex-1 text-sm text-neutral-800 line-clamp-2">{q.text}</p>
                           <span className="text-xs text-neutral-400 shrink-0">{q.answers.length} opts</span>
@@ -1403,14 +1829,14 @@ export default function TutorContentPage() {
                     </div>
                   )
                 ) : draftQuizQuestions.length === 0 ? (
-                  <div className="bg-neutral-50 border border-dashed border-neutral-200 rounded-xl p-5 text-center">
+                  <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-5 text-center">
                     <HelpCircle className="w-6 h-6 text-neutral-300 mx-auto mb-1" />
                     <p className="text-sm text-neutral-400">No questions yet. Add some above.</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
                     {draftQuizQuestions.map((q, i) => (
-                      <div key={i} className="flex items-start gap-3 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5">
+                      <div key={i} className="flex items-start gap-3 bg-white border border-neutral-200 rounded-xl px-3 py-2.5">
                         <span className="mt-0.5 text-xs font-bold text-neutral-400 shrink-0">Q{i + 1}</span>
                         <p className="flex-1 text-sm text-neutral-800 line-clamp-2">{q.text}</p>
                         <span className="text-xs text-neutral-400 shrink-0">{q.answers.filter(a => a.text).length} opts</span>
@@ -1421,7 +1847,6 @@ export default function TutorContentPage() {
                             while (base.length < 4) base.push({ text: "", is_correct: false });
                             setQuestionForm({ text: q.text, explanation: q.explanation, answers: base });
                             setQuestionFormErrors("");
-                            // use negative index as fake id to identify draft
                             setEditingQuestion({ id: -(i + 1), text: q.text, explanation: q.explanation, order: i + 1, answers: q.answers.map((a, j) => ({ id: j, text: a.text, is_correct: a.is_correct, order: j })) });
                             setQuizEditorOpen(true);
                           }}
@@ -1442,19 +1867,6 @@ export default function TutorContentPage() {
                 )}
               </div>
             )}
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
-                Description <span className="text-neutral-400 font-normal">(optional)</span>
-              </label>
-              <textarea
-                className="w-full h-20 p-3 text-sm border-[1.5px] border-neutral-200 rounded-xl bg-white resize-none focus:outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/10"
-                placeholder="What will students learn in this module?"
-                value={moduleForm.description}
-                onChange={(e) => setModuleForm({ ...moduleForm, description: e.target.value })}
-              />
-            </div>
 
             {/* Duration */}
             <div>
@@ -1567,7 +1979,7 @@ export default function TutorContentPage() {
         <ModalBody>
           {/* Step indicator */}
           <div className="flex items-center justify-between mb-6 px-2">
-            {(["Details", "Pricing", "Publish"] as const).map((label, i) => {
+            {(["Details", "Access", "Publish"] as const).map((label, i) => {
               const num = i + 1;
               const done = wizardStep > num;
               const active = wizardStep === num;
@@ -1673,7 +2085,7 @@ export default function TutorContentPage() {
             </div>
           )}
 
-          {/* Step 2: Pricing */}
+          {/* Step 2: Access */}
           {wizardStep === 2 && (
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
@@ -1681,40 +2093,21 @@ export default function TutorContentPage() {
                   <input
                     type="checkbox"
                     checked={form.is_free}
-                    onChange={(e) => setForm({ ...form, is_free: e.target.checked, price: e.target.checked ? "" : form.price })}
+                    onChange={(e) => setForm({ ...form, is_free: e.target.checked, price: "" })}
                     className="w-4 h-4 rounded border-neutral-300 text-violet-600 focus:ring-violet-500"
                   />
                   Free course
                 </label>
               </div>
               {!form.is_free && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">Price (BWP)</label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-neutral-400">P</span>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        placeholder="49.00"
-                        value={form.price}
-                        onChange={(e) => { setForm({ ...form, price: e.target.value }); setFormErrors((p) => ({ ...p, price: "" })); }}
-                        className="w-full pl-8 pr-3.5 py-2.5 border-[1.5px] border-neutral-200 rounded-[10px] text-sm bg-white text-neutral-900 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/10"
-                      />
-                    </div>
-                    {formErrors.price && <p className="text-xs text-red-500 mt-1">{formErrors.price}</p>}
-                  </div>
-                  {form.price && Number(form.price) > 0 && (
-                    <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
-                      <p className="text-sm font-semibold text-neutral-700 mb-1">Your estimated share (90%)</p>
-                      <p className="text-2xl font-extrabold text-violet-600">
-                        P{(Number(form.price) * 0.9).toFixed(2)}{" "}
-                        <span className="text-sm font-medium text-neutral-500">per sale</span>
-                      </p>
-                    </div>
-                  )}
-                </>
+                <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-neutral-800 mb-1">
+                    Subscriber-only course
+                  </p>
+                  <p className="text-sm text-neutral-500">
+                    Learners will need an active tutor subscription to unlock this course and the rest of your paid library. Set the weekly, monthly, and yearly rates from Payments.
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -1735,7 +2128,7 @@ export default function TutorContentPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-green-600" />
-                    <span className="text-sm">Pricing — {form.is_free ? "Free" : `P${form.price}`}</span>
+                    <span className="text-sm">Access — {form.is_free ? "Free" : "Subscription"}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {coverPreview ? (
@@ -1777,7 +2170,7 @@ export default function TutorContentPage() {
       <ScheduleLiveModal
         open={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
-        onCreated={() => { setLiveFetched(false); fetchLiveSessions(); }}
+        onCreated={() => { void fetchLiveSessions(); }}
         token={tokens?.access ?? ""}
         categories={categories}
       />

@@ -9,6 +9,7 @@ import {
   FileCheck,
   Layers,
   BarChart2,
+  CreditCard,
   Settings,
 } from "lucide-react";
 import { Sidebar, type SidebarSection } from "@/components/dashboard/sidebar";
@@ -25,6 +26,7 @@ const titleMap: Record<string, string> = {
   "/dashboard/admin/applications": "Applications",
   "/dashboard/admin/content": "Content Review",
   "/dashboard/admin/revenue": "Revenue",
+  "/dashboard/admin/payments": "Tutor Payment Configs",
   "/dashboard/admin/settings": "Platform Settings",
 };
 
@@ -45,7 +47,10 @@ export default function AdminDashboardLayout({
       .then((d) =>
         setCounts({
           applications: d.pending_tutor_applications,
-          content: d.pending_courses + d.pending_study_guides,
+          content:
+            d.pending_courses +
+            d.pending_study_guides +
+            d.pending_live_classes,
         })
       )
       .catch(() => {});
@@ -60,6 +65,7 @@ export default function AdminDashboardLayout({
         { label: "Applications", href: "/dashboard/admin/applications", icon: FileCheck, badge: counts && counts.applications > 0 ? String(counts.applications) : undefined },
         { label: "Content Review", href: "/dashboard/admin/content", icon: Layers, badge: counts && counts.content > 0 ? String(counts.content) : undefined },
         { label: "Revenue", href: "/dashboard/admin/revenue", icon: BarChart2 },
+        { label: "Payment Configs", href: "/dashboard/admin/payments", icon: CreditCard },
       ],
     },
     {
