@@ -47,10 +47,7 @@ export function ScheduleLiveModal({
     setLoading(true);
     setErrors({});
     try {
-      const payload = { ...form };
-      if (payload.is_free) {
-        payload.price = "0";
-      }
+      const payload = { ...form, price: "0" };
       const lc = await apiFetch<LiveClass>("/courses/my-live-classes/", {
         method: "POST",
         token,
@@ -72,6 +69,9 @@ export function ScheduleLiveModal({
       });
     } catch (err) {
       if (err instanceof ApiError && err.body) {
+        if (typeof err.body.detail === "string") {
+          toast.error(err.body.detail);
+        }
         const fieldErrors: Record<string, string> = {};
         for (const [key, val] of Object.entries(err.body)) {
           fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
@@ -209,7 +209,7 @@ export function ScheduleLiveModal({
 
           <div>
             <label className="text-sm font-semibold text-neutral-700 mb-1.5 block">
-              Pricing
+              Access
             </label>
             <div className="flex gap-3">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -230,23 +230,13 @@ export function ScheduleLiveModal({
                   onChange={() => update("is_free", false)}
                   className="accent-primary"
                 />
-                <span className="text-sm">Paid</span>
+                <span className="text-sm">Subscriber-only</span>
               </label>
             </div>
             {!form.is_free && (
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="Price"
-                value={form.price}
-                onChange={(e) => update("price", e.target.value)}
-                className="mt-2"
-                error={!!errors.price}
-              />
-            )}
-            {errors.price && (
-              <p className="text-xs text-error mt-1">{errors.price}</p>
+              <p className="text-xs text-neutral-500 mt-2">
+                Learners join this session through your tutor subscription plan. Set the actual rates from the Payments page.
+              </p>
             )}
           </div>
         </div>
